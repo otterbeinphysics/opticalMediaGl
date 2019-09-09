@@ -1,0 +1,288 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+     xmlns:svg="http://www.w3.org/2000/svg"
+     xml:lang="en">
+<head> 
+<META HTTP-EQUIV="Pragma" CONTENT="no-cache">
+ 
+<title>Optical Media Simulation</title>
+
+<script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+<link rel="stylesheet" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/themes/smoothness/jquery-ui.css" />
+<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/three.js/108/three.js"></script>
+
+<script src="LineMaterial.js"></script>
+<script src="LineSegments2.js"></script>
+<script src="LineSegmentsGeometry.js"></script>
+<script src="LineGeometry.js"></script>
+<script src="Line2.js"></script>
+
+<script type="text/javascript" src="script.js"></script>
+
+
+<script id="vertex-shader" type="x-shader/x-vertex" src="vertex-shader.glsl"></script>
+<script id="fragment-shader" type="x-shader/x-fragment" src="fragment-shader.glsl"></script>
+
+</script>
+
+
+
+<script type="text/javascript">
+  $(function(){
+     $("#do-popup").click(function(){
+       $('#PopupWindow').css('display','block');
+       return false;
+     }) 
+     $(window).click(function(){
+       $('#PopupWindow').css('display','none');
+     }) 
+  });
+</script>
+
+
+<style type="text/css"> 
+  div#sim{
+  /*  width:800px ; height: 600px; align: center;border: 1*/
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    cursor: default;
+    overflow: hidden;
+    width: 100%;
+    height: 100vh;
+  /*  margin-bottom: 100px;*/
+    z-index: 1;
+  }
+  div#controls
+  {
+    position: fixed;
+    top: 0;
+    margin:10px;
+    border: 1px solid;
+    z-index: 3;
+    overflow-x:none;
+    
+    pointer-events:none;
+    -moz-user-select: none; -webkit-user-select: none; -ms-user-select:none; user-select:none;
+    background-color: white;
+  }
+  input, button, label, select {
+    pointer-events:all;
+  }
+
+  .bttn {
+    pointer-events:all;  
+  }
+
+  div#controls a  {
+    pointer-events:all;
+  }
+
+  div#totalenergy
+  {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    margin:10px;
+    z-index: 2;  
+    pointer-events:none;
+    color: orange;
+  }
+
+  div#debug
+  {
+    display:none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    margin:10px;
+    z-index: 2;  
+    pointer-events:none;
+    color: orange;
+  }
+
+  .bttn {
+    background-color: gray;
+    color: white;
+    -moz-border-radius: 5px;
+    -webkit-border-radius: 5px;
+    border-radius: 5px;
+    border: 1px solid black;
+    padding: 3px;
+    display:inline-block;
+    width:160px;
+    text-align: center;
+  }
+  .bttn:hover {
+    background-color: darkgreen;
+  }
+
+  div#controls .addcharge  {
+    pointer-events:all;
+  }
+
+  .round-button {
+  	width:25px;
+    display:inline-block;
+   vertical-align: text-top;}
+  .round-button.big {
+  	width:40px;
+    display:inline-block;
+   vertical-align: text-top;
+  }
+
+
+  .round-button-circle {
+    margin-top: 10px;
+  	width: 25px;
+  	height:0;
+  	padding-bottom: 100%;
+    border-radius: 50%;
+  	border:1px solid black;
+    overflow:hidden;
+      
+    background: red; 
+    box-shadow: 0 0 3px gray;
+  }
+  .round-button-circle.big {
+    margin-top: 2.5px;
+  	width: 40px;
+  }
+  .round-button-circle:hover {
+  	background:darkred;
+  }
+  .round-button-circle.neg {
+    background: blue; 
+    box-shadow: 0 0 3px gray;
+  }
+  .round-button-circle.neg:hover {
+  	background:darkblue;
+  }
+  .round-button span {
+    display:block;
+  	float:left;
+  	width:100%;
+  	padding-top:50%;
+      padding-bottom:50%;
+  	line-height:1em;
+  	margin-top:-0.5em;
+      
+  	text-align:center;
+  	color:#e2eaf3;
+      font-family:Verdana;
+      font-size:1.0em;
+      text-decoration:none;
+  }
+
+
+
+  #PopupWindow {
+      display: none;
+      position: absolute;
+      width: 80%; height: 80%;
+      left: 10%; top: 30px;
+  /*    margin: -155px 0 0 -300px;*/
+      border: solid 3px blue;
+      background-color: #ffffff;
+      overflow-y:scroll;
+      z-index:10;
+      box-shadow: 20px 20px 30px gray;
+  }
+
+  .control-grp {
+    margin:15px;
+    border: 1px solid black;
+    position: relative;
+    display: inline-block;
+    padding-top: 10px;
+  }
+  .control-hdr {
+    position: absolute;
+    top:-10px;
+    left:10px;
+    background-color: white;
+  }
+
+  .showval {
+    width:35px;
+    display:inline-block;
+    jusify-content: right;
+  }
+  </style>
+
+</head>
+<body>
+  <div id="everything">
+    
+  <!-- The main viewing area is a canvas. -->
+  <div>
+    <div class="notpad" id="sim" ></div>
+  </div>
+  
+  <!-- controls -->
+    <div class="controls" id="controls">
+      <div class="control-grp">
+        <span class="control-hdr"> Incoming wave: </span>
+        <div style="margin:5px">
+          <span id='show-wavelength' class="showval"></span>
+          <label><input id='ctl-wavelength' type="range" min="10" max="300" value="100" />Wavelength</label>
+        </div>
+        <div style="margin:5px">
+          <span id='show-period' class="showval"></span>
+          <label><input id='ctl-period' type="range" min="0.1" max="5" value="2" step='0.1' />Period</label>
+      </div>
+        <div style="margin:5px">
+          <span id='show-width' class="showval"></span>
+          <label><input id='ctl-width' type="range" min="0.1" max="1" value="0.5" step='0.1'/>Width</label><span id='show-period'></span>
+        </div>
+         <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-primary" />Show primary wave</label></div>
+
+      </div>
+
+      <div class="control-grp">
+        <span class="control-hdr"> Scatterers: </span>
+
+        <div style="margin:5px">
+          <span id='show-phase' class="showval"></span>
+          <label><input id='ctl-phase' type="range" min="0" max="180" value="30" />Phase</label>
+        </div>
+        <div style="margin:5px">
+          <span id='show-natoms' class="showval">--</span>
+          <label><input id='ctl-natoms' type="range" min="0" max="180" value="40" />Number</label>
+        </div>
+
+        <div style="margin:5px">
+          <label>Layout: <select id='ctl-atom-layout'>
+            <option value='grid'>Grid</option>
+            <option value='agrid'>Angled Grid</option>
+            <option value='random'>Random</option>
+            <option value='arandom'>Angled Random</option>
+                     </select></label>
+       </div>
+
+        <div style="margin:5px"><label><input type ="checkbox"  id="ctl-rescatter" />Rescatter (slow)</label></div>
+
+      </div>
+
+      <div class="control-grp">
+        <span class="control-hdr"> Wavefronts: </span>
+        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-primary-wavefront" />Show Primary</label></div>
+        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-scatter-wavefront" />Show Scatters</label></div>
+      </div>
+
+      <div class="control-grp">
+        <span class="control-hdr"> Run: </span>
+
+        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-animate" />Animate</label></div>
+        <button id="ctl-reset">Reset</button>
+      </div>
+
+    </div>
+  
+
+
+
+</body>
+  
