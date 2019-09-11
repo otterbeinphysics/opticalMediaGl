@@ -77,7 +77,7 @@ float RescatteredField(vec2 xy,float t1, vec2 jatom, const int j, out float r)
 
   r = distance(jatom,xy);
   float dt = r/velocity;
-  dt -= phase*period/(2.0*PI);
+  dt = phase*period/(2.0*PI);
   float retarded_time = t1-dt;
 
   float psi = planeWave(jatom,retarded_time); // field at atom
@@ -180,17 +180,14 @@ function Applet(element, options)
   self.v = self.wavelength/self.period;
 
   self.phase_deg = parseFloat($("#ctl-phase").val());
-  $('#show-phase').html(self.phase_deg + "&#8451;");
-  self.phase = ((self.phase_deg+360)%360)/180*Math.PI;
+  $('#show-phase').html(self.phase_deg + "&deg;");
+  self.phase = ((self.phase_deg)%360)/180*Math.PI;
 
 
   this.animating = true;
   this.last_frame_t = Date.now();
   this.t_ms = 0;
 
-
-  this.phase = 0;
-  this.phase = -90/180*Math.PI;
   this.scatteramp = 0.01;
 
   this.tstop = 10; // 10 seconds later, stop the sim.
@@ -286,8 +283,8 @@ function Applet(element, options)
 
    $("#ctl-phase").on("change",function(){
    	  self.phase_deg = parseFloat($("#ctl-phase").val());
-	    $('#show-phase').html(self.phase_deg + "&#8451;");
-      self.phase = ((self.phase_deg-360)%360)/180*Math.PI;
+	    $('#show-phase').html(self.phase_deg + "&deg;");
+      self.phase = ((self.phase_deg)%360)/180*Math.PI;
     	console.error("new phase",self.phase);
      self.UpdateUniforms();
    })
@@ -301,10 +298,12 @@ function Applet(element, options)
    $('#ctl-primary-wavefront').on("change",function(){
        var onf = $(this).is(":checked");
        self.wavefronts.visible = onf;
+       if(!this.animating) self.AnimationRender();
    });
    $('#ctl-scatter-wavefront').on("change",function(){
        var onf = $(this).is(":checked");
        self.scatterfronts.visible = onf;
+       if(!this.animating) self.AnimationRender();
    });
    $('#ctl-rescatter').on("change",function(){
        var onf = $(this).is(":checked");
@@ -366,8 +365,8 @@ Applet.prototype.UpdateUniforms = function()
   this.material.uniforms.ymin.value = this.ymin;
   this.material.uniforms.ymax.value = this.ymax;
   this.material.uniforms.show_primary.value = this.show_primary;
-   this.material.uniforms.do_rescatter.value = this.do_rescatter;
-
+  this.material.uniforms.do_rescatter.value = this.do_rescatter;
+  if(!this.animating) this.AnimationRender();
 }
 
 
@@ -376,7 +375,8 @@ Applet.prototype.AnimationRender = function()
   var now = Date.now();
   var frame_ms =  (now-this.last_frame_t);
   if(frame_ms > 300) frame_ms = 300;
-  this.t_ms += frame_ms;
+
+  if(this.animating) this.t_ms += frame_ms;
   // if(this.t_ms > 300) this.t_ms = 300;
   this.last_frame_t = now; 
   var t = this.t_ms/1000;
@@ -439,6 +439,7 @@ Applet.prototype.SetScatterFronts = function(t)
   for(var i=0;i<this.atoms.length;i++){
     var line = this.scatterfronts.children[i];
     var atom = this.atoms[i];
+    if(atom[1]<this.ymin || atom[1]>this.ymax) {line.visible=false; continue;}
     line.position.x = atom[0];
     line.position.y = atom[1]-0.5;
 
@@ -461,14 +462,29 @@ Applet.prototype.SetAtomPositions = function()
   this.natoms =  $('#ctl-natoms').val();
   var layout =    $('#ctl-atom-layout').find(':selected').val();
 
+  // bounds:
+  var xmin = 0.35;
+  var xmax = 0.75;
+  var ymin = this.ymin;
+  var ymax = this.ymax;
+  var angle = 30/180*Math.PI;
+
+  if(layout.startsWith('a')) {
+    ymin = (this.ymin-0.5)/Math.sin(angle) + 0.5;
+    ymax = (this.ymax-0.5)/Math.cos(angle) + 0.5+0.2;
+
+  }
+  var xr = xmax - xmin;
+  var yr = ymax - ymin;
+
   if(layout.includes("grid")) {
     var cols = Math.floor(Math.sqrt(this.natoms));
     var rows = Math.ceil(this.natoms / cols);
     var n = 0;
     for(var ix = 0; ix< cols; ix++) {
       for(var iy = 0; iy<rows; iy++) {
-          var x = ((ix/cols)*3/5 + 1/5);
-          var y = ((iy/rows)*3/5 + 1/5);
+          var x = ((ix/(cols-1))*xr + xmin);
+          var y = ((iy/(rows-1))*yr + ymin);
           if(n<this.natoms) {
               this.atoms.push([x,y]);
               n++;
@@ -481,10 +497,10 @@ Applet.prototype.SetAtomPositions = function()
       var x = Math.random();
       var y = Math.random();
       // if(y>x) continue;
-      if(y<this.ymin) continue;
-      if(y>this.ymax) continue;
-      if(x<0.45) continue;
-      if(x>0.70) continue;
+      if(y<ymin) continue;
+      if(y>ymax) continue;
+      if(x<xmin) continue;
+      if(x>xmax) continue;
       this.atoms.push([x,y]);
       // this.atoms.push( [Math.random()*this.width/2+this.width/4, Math.random()*this.height/2+this.height/4]);
     }    
@@ -495,8 +511,8 @@ Applet.prototype.SetAtomPositions = function()
     for(var atom of this.atoms) {
       var x = atom[0]-0.5;
       var y = atom[1]-0.5;
-      atom[0] =  x*Math.cos(Math.PI/4) + y*Math.sin(Math.PI/4) + 0.5;
-      atom[1] = -x*Math.sin(Math.PI/4) + y*Math.cos(Math.PI/4) + 0.5;
+      atom[0] =  x*Math.cos(angle) + y*Math.sin(angle) + 0.5;
+      atom[1] = -x*Math.sin(angle) + y*Math.cos(angle) + 0.5;
     }
   }
 
@@ -511,6 +527,7 @@ Applet.prototype.SetAtomPositions = function()
   for( atom of this.atoms ) { atoms_unrolled.push(atom[0], atom[1]); };
   this.material.uniforms.natoms.value = this.atoms.length;
   this.material.uniforms.atoms.value = atoms_unrolled;
+  if(!this.animating) this.AnimationRender();
 
 }
 
