@@ -328,6 +328,10 @@ function Applet(element, options)
   // this.DoFrame()
 
   this.AnimationRender();
+
+  this.wavefronts.visible = $('#ctl-primary-wavefront').is(":checked");
+  this.scatterfronts.visible = $('#ctl-scatter-wavefront').is("checked");
+
 }
 
 
@@ -385,7 +389,6 @@ Applet.prototype.AnimationRender = function()
 
   this.SetPlaneWaveFronts(t);
   this.SetScatterFronts(t);
-
   this.renderer.render( this.scene, this.camera );
   console.log("render");
   if(this.animating)
