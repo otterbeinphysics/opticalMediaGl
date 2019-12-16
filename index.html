@@ -3,15 +3,15 @@
 <html xmlns="http://www.w3.org/1999/xhtml"
      xmlns:svg="http://www.w3.org/2000/svg"
      xml:lang="en">
-<head> 
+<head>  
 <META HTTP-EQUIV="Pragma" CONTENT="no-cache">
  
 <title>Optical Media Simulation</title>
 
-<script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
-<link rel="stylesheet" href="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/themes/smoothness/jquery-ui.css" />
-<script src="//ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
-<script src="//cdnjs.cloudflare.com/ajax/libs/three.js/108/three.js"></script>
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+<link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/themes/smoothness/jquery-ui.css" />
+<script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.11.2/jquery-ui.min.js"></script>
+<script src="http://cdnjs.cloudflare.com/ajax/libs/three.js/108/three.js"></script>
 
 <script src="LineMaterial.js"></script>
 <script src="LineSegments2.js"></script>
@@ -226,55 +226,51 @@
       <div class="control-grp">
         <span class="control-hdr"> Incoming wave: </span>
         <div style="margin:5px">
-          <span id='show-wavelength' class="showval"></span>
-          <label><input id='ctl-wavelength' type="range" min="10" max="300" value="100" />Wavelength</label>
+          <span id='show-frequency' class="showval"></span>
+          <label><input id='ctl-frequency' type="range" min="0.01" max="0.3" step="0.01" value="0.1" />Frequency (rad/frame)</label>
         </div>
         <div style="margin:5px">
-          <span id='show-period' class="showval"></span>
-          <label><input id='ctl-period' type="range" min="0.1" max="5" value="2" step='0.1' />Period</label>
-      </div>
-        <div style="margin:5px">
-          <span id='show-width' class="showval"></span>
-          <label><input id='ctl-width' type="range" min="0.1" max="1" value="0.5" step='0.1'/>Width</label><span id='show-period'></span>
+          <span id='show-amplitude' class="showval"></span>
+          <label><input id='ctl-amplitude' type="range" min="0.0" max="2.0" value="1.0" step="0.05" />Amplitude</label>
         </div>
-         <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-primary" />Show primary wave</label></div>
-
+        <div style="margin:5px">
+          <span id='show-speed' class="showval"></span>
+          <label><input id='ctl-speed' type="range" min="0.05" max="0.6" value="0.4" step='0.05' />Speed</label>
       </div>
+    </div>
 
       <div class="control-grp">
         <span class="control-hdr"> Scatterers: </span>
 
         <div style="margin:5px">
-          <span id='show-phase' class="showval"></span>
-          <label><input id='ctl-phase' type="range" min="0" max="180" value="30" />Phase</label>
+          <span id='show-density' class="showval"></span>
+          <label><input id='ctl-density' type="range" min="0.0" max="0.005" step="0.0002" value="0.0005" />Density</label>
         </div>
         <div style="margin:5px">
-          <span id='show-natoms' class="showval">--</span>
-          <label><input id='ctl-natoms' type="range" min="0" max="180" value="40" />Number</label>
+          <span id='show-field-coupling' class="showval"></span>
+          <label><input id='ctl-field-coupling' type="range" min="0.0" max="2.0" step="0.05" value="1.0" />Field Coupling</label>
         </div>
 
         <div style="margin:5px">
-          <label>Layout: <select id='ctl-atom-layout'>
-            <option value='grid'>Grid</option>
-            <option value='agrid'>Angled Grid</option>
-            <option value='random'>Random</option>
-            <option value='arandom'>Angled Random</option>
-                     </select></label>
-       </div>
+          <span id='show-w0' class="showval"></span>
+          <label><input id='ctl-w0' type="range" min="0.01" max="0.95" step="0.01" value="0.2" />&omega;<sub>0</sub></label>
+        </div>
+        <div style="margin:5px">
+          <span id='show-beta' class="showval"></span>
+          <label><input id='ctl-beta' type="range" min="0" max="0.1" step="0.01"  value="0.01"/>&beta;</label>
+        </div>
 
-        <div style="margin:5px"><label><input type ="checkbox"  id="ctl-rescatter" />Rescatter (slow)</label></div>
+       <div style="margin:5px">
+          <span id='show-x0' class="showval"></span>
+          <label><input id='ctl-x0' type="range" min="0" max="1.0" step="0.01"  value="0.0"/>x<sub>0</sub></label>
+        </div>
 
-      </div>
-
-      <div class="control-grp">
-        <span class="control-hdr"> Wavefronts: </span>
-        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-primary-wavefront" />Show Primary</label></div>
-        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-scatter-wavefront" />Show Scatters</label></div>
       </div>
 
       <div class="control-grp">
         <span class="control-hdr"> Run: </span>
 
+        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-osc" />Field/oscillators</label></div>
         <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-animate" />Animate</label></div>
         <button id="ctl-reset">Reset</button>
       </div>
