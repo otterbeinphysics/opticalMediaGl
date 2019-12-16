@@ -18,12 +18,9 @@
 <script src="LineSegmentsGeometry.js"></script>
 <script src="LineGeometry.js"></script>
 <script src="Line2.js"></script>
-
+<script type="text/javascript" src="shaders.js"></script>
 <script type="text/javascript" src="script.js"></script>
 
-
-<script id="vertex-shader" type="x-shader/x-vertex" src="vertex-shader.glsl"></script>
-<script id="fragment-shader" type="x-shader/x-fragment" src="fragment-shader.glsl"></script>
 
 </script>
 
@@ -237,6 +234,9 @@
           <span id='show-speed' class="showval"></span>
           <label><input id='ctl-speed' type="range" min="0.05" max="0.6" value="0.4" step='0.05' />Speed</label>
       </div>
+      <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-primary-wavefront" />Highlight wavefronts</label></div>
+
+
     </div>
 
       <div class="control-grp">

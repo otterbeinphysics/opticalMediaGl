@@ -3,383 +3,6 @@ $(function(){
   applet = new Applet($('div#sim'));
 });
 
-var vertex_shader = `
-precision highp float;
-precision highp int;
-uniform mat4 modelMatrix;
-uniform mat4 modelViewMatrix;
-uniform mat4 projectionMatrix;
-uniform mat4 viewMatrix;
- uniform mat3 normalMatrix;
- uniform vec3 cameraPosition;
- attribute vec3 position;
- attribute vec3 normal;
- attribute vec2 uv;
-varying vec2 vUv;
-
-   void main() {
-       vUv = uv;
-       vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-
-      vec3 vPosition = (modelMatrix *
-           vec4(position,1.0)).xyz;
-       gl_Position = projectionMatrix * mvPosition;
-      // vec3 transformedNormal = normalMatrix *  vec3( normal );
-      // vNormal = normalize( transformedNormal );
-      // vViewDirection = normalize(mvPosition.xyz);
-  }
-  `
-;
-
-
-// var zero_fragment_shader = 
-// `
-// precision mediump float;
-// varying vec2  vUv;
-
-// const vec4 decodeVec = vec4(1.0, 1.0/255.0, 1.0/65025.0, 0);
-// const vec4 encodeVec = vec4(1.0, 255.0, 65025.0, 0);
-// const float kEncodeBit = 1.0/255.0;
-
-// float decodeValue(vec4 v)
-// {
-//   return dot(v,decodeVec)*2.0-1.0;
-// }
-
-// vec4 encodeValue(float f)
-// {
-//   vec4 enc = encodeVec * ((f+1.0)/2.0);
-//   enc = fract(enc); // fractional part.
-//   enc = enc*(1.0/255.0); // Turn into a fraction.
-//   enc -= enc.yzww * kEncodeBit;
-//   return enc;
-// }
-
-// void main() {
-//   // fill with zeroes.
-//   gl_FragColor = encodeValue(0);
-// }
-// `;
-
-// This is the version that encodes fixed-point values.
-var shader_includes_old = `
-precision mediump float;
-
-const vec3 decodeVec = vec3(1.0, 1.0/255.0, 1.0/65025.0);
-const vec3 encodeVec = vec3(1.0, 255.0, 65025.0);
-float kEncodeBit = 1.0/255.0;
-
-float decodeValue(vec3 v)
-{
-  return dot(v,decodeVec)*2.0-1.0;
-}
-vec3 encodeValue(float f)
-{
-  vec3 enc = encodeVec * ((f+1.0)*0.5);  // Turn into 0-1, then multiply by encode vector.
-  enc = fract(enc); // fractional part.
-  enc.x -= enc.y * kEncodeBit;
-  enc.y -= enc.z * kEncodeBit;
-  return enc;
-}
-`
-// This is the version that encodes floating-point values.
-function encode(f)
-{
-  // Return three bytes of data as packed floating point representation
-  var exponent = Math.floor(Math.log2(Math.abs(f)))+1;
-  // clamp
-  var coded_exponent = exponent+128;
-  if(coded_exponent<0) coded_exponent = 0;
-  if(coded_exponent>255) coded_exponent = 255;
-  var divisor = 1<<exponent;
-  var fraction = f/divisor; // Value between -1 and 1.
-  var normfrac = (fraction/2.) + 0.5;  // Value between 0 and 1
-  var high = Math.floor(255*normfrac);
-  var low  = Math.floor((normfrac-high/255.)*65025);
-  return[high,low,coded_exponent];
-}
-
-function decode(vec)
-{
-  var exponent = vec[2] -128;
-  var divisor = 1<<exponent;
-  var f = vec[0]/255;
-  f += vec[1] / 65025;
-  var signed = (f-0.5)*2.0;
-  return signed * divisor;
-}
-var shader_includes = `
-precision mediump float;
-
-const vec3 decodeVec = vec3(1.0, 1.0/255.0, 1.0/65025.0);
-const vec3 encodeVec = vec3(1.0, 255.0, 65025.0);
-float kEncodeBit = 1.0/255.0;
-
-vec3 encodeValue(float f)
-{
-  float exponent = floor(log2(abs(f)))+1.0;
-  float coded_exponent = (exponent+128.0)/255.0;
-  float divisor = exp2(exponent);
-  float fraction = f/divisor;
-
-  // float fraction = f;
-
-  float normfrac = (fraction/2.0)+0.5;
-  float high = floor(255.*normfrac)/255.;
-  float low = (normfrac-high)*255.0;
-  
-  
-  vec3 enc;
-  enc.x = high;
-  enc.y = low;
-  enc.z = coded_exponent;
-
-  return enc;
-}
-
-float decodeValue(vec3 v)
-{
-  float exponent = (v.z*255.0)-128.0;
-  float divisor = exp2(exponent);
-  // divisor = 1.0;
-  float f = v.x;
-  f+= v.y/255.0;
-  float signed = (f-0.5)*2.0;
-  return signed*divisor;
-}
-`
-
-
-var sim_fragment_shader = shader_includes+`
-#define PI 3.1415926535897932384626433832795
-#define MAX_ATOMS 100
-
-precision mediump float;
-
-  varying vec2 vUv;
-  // varying vec3 vPosition;
-  // varying vec3 vNormal;
-  // varying vec3 vViewDirection;
-
-uniform float clear_flag; 
-uniform float c;  // speed of wave, in pixels per frame
-uniform float width;  // size of input textures, in pixels
-uniform float height;
-uniform sampler2D tex_t2; // Most recent frame
-uniform sampler2D tex_t1; // Second most recent frame.
-uniform sampler2D tex_o2; // Most recent frame containing oscillator data
-uniform sampler2D tex_o1; // Second most recent frame.
-uniform float t; // For wave generation
-
-uniform float plane_wave_frequency; // In rad/s, uses 't'
-uniform float plane_wave_amplitude; // In rad/s, uses 't'
-uniform float field_coupling;
-
-precision mediump float;
-
-void main() {
-  // find the input texture values
-  // vUv is the normalized U,V coordinate in the object which nominally
-  // maps to inputtexture(u,v).  However, we're going to manipulate it:
-  float newpsi;
-
-  if(vUv.x<0.05) {
-        // Plane wave creator
-        newpsi = plane_wave_amplitude* sin(t* plane_wave_frequency);
-  
-  } else {
-
-        // find the last two samples at THIS position.
-        float psi = decodeValue(texture2D(tex_t2,vUv).xyz);
-        float psi_last = decodeValue(texture2D(tex_t1,vUv).xyz);
-        float psidot = psi - psi_last;
-
-        // Find the values left, right, top, bottom in most recent texture.
-        vec2 pixel = vec2(1.0/width,1.0/height);
-        vec2 vleft = vec2(vUv.x - pixel.x, vUv.y);
-        vec2 vright = vec2(vUv.x + pixel.x, vUv.y);
-        vec2 vbelow = vec2(vUv.x, vUv.y - pixel.y);
-        vec2 vabove = vec2(vUv.x, vUv.y + pixel.y);
-        
-        float psi_left  = decodeValue(texture2D(tex_t2,vleft).xyz);
-        float psi_right = decodeValue(texture2D(tex_t2,vright).xyz);
-        float psi_below = decodeValue(texture2D(tex_t2,vbelow).xyz);
-        float psi_above = decodeValue(texture2D(tex_t2,vabove).xyz);
-
-        float divergence = (psi_right-psi)-(psi-psi_left) + (psi_below-psi)-(psi-psi_above);
-
-        float psidoubledot = divergence * c * c  - 0.00001*psi;
-
-        // oscillator pushes on field by difference in field height and oscillator height
-        vec4 osc_raw = texture2D(tex_o2,vUv);
-        float x;
-        if(osc_raw.a > 0.5) {
-          x = decodeValue(osc_raw.xyz);
-          psidoubledot += field_coupling*(x-psi);
-        }
-
-        // Damp down oscillations near the border of the window to prevent reflections.
-        float edgex = min(vUv.x,1.0-vUv.x);
-        float edgey = min(vUv.y,1.0-vUv.y);
-        float edge = min(edgex,edgey);
-        float damp = smoothstep(0.0,0.04,edge);
-        psidoubledot -= psidot*(1.0-damp)*0.8;
-
-        float newpsidot = psidot + psidoubledot;
-
-        newpsi = psi + newpsidot;
-
-  }
-
-
-
- 
-
-  
-
-  if(clear_flag > 0.0) newpsi=0.0;
-  gl_FragColor.xyz = encodeValue(newpsi);
-  gl_FragColor.a = 1.0;
-  
-} 
-`;
-
-
-
-var resonator_fragment_shader = shader_includes+`
-#define PI 3.1415926535897932384626433832795
-#define MAX_ATOMS 100
-
-precision mediump float;
-
-varying vec2 vUv;
-
-uniform float osc_density;  //oscilators per pixel
-uniform float w0; // resonating frequency, in rad/frame
-uniform float beta; // damping factor
-uniform float x0; // starting value;
-
-uniform sampler2D tex_t2; // Most recent contianing the field values
-uniform sampler2D tex_o2; // Most recent frame containing oscillator data
-uniform sampler2D tex_o1; // Second most recent frame
-uniform float clear_flag; 
-float dt = 1.0;
-
-float random (vec2 st) {
-    return fract(sin(dot(st.xy,
-                  vec2(12.9898,78.233)))*
-                  43758.5453123);
-}
-
-void main() {
-  // is the current pixel active? look at the alpha channel to see.
-  if(clear_flag>0.0) {
-
-    // Find a few random spots to make opaque. Set to a large value for testing.
-    if( (vUv.x>0.4) && (random(vUv)>1.0-osc_density)) {
-          gl_FragColor.a = 1.0;
-          gl_FragColor.xyz = encodeValue(x0);
-    } else {
-          gl_FragColor.a = 0.0;
-          gl_FragColor.xyz = encodeValue(0.0);
-    }
-
-  } else {
-
-    vec4 rgba_n_2 = texture2D(tex_o2,vUv);
-    if(rgba_n_2.a == 0.0) {
-      // no resonanator here
-      gl_FragColor=vec4(0.0, 0.0, 0.0, 0.0);
-      return;
-    }
-
-    vec4 rgba_n_1 = texture2D(tex_o1,vUv);
-
-    float x1 = decodeValue(rgba_n_1.xyz);
-    float x2 = decodeValue(rgba_n_2.xyz);
-    // float E1 = decodeValue(texture2D(tex_t1,vUv).xyz);
-    float psi = decodeValue(texture2D(tex_t2,vUv).xyz);
-
-    float xdot = (x2-x1)/dt;
-    // force on an oscillator:
-    float xddot = 
-                w0*w0*(psi-x2) 
-                // - w0*w0*x2
-                - beta*xdot;
-    float new_xdot = xdot + xddot*dt;
-    float new_x = x2 + new_xdot*dt;
-
-    gl_FragColor.xyz = encodeValue(new_x);
-    gl_FragColor.a = rgba_n_1.a;
-
-  }
-} 
-`;
-
-
-
-var disp_fragment_shader = shader_includes + `
-#define PI 3.1415926535897932384626433832795
-
-precision mediump float;
-
-// set of textures in tdc dimention, consecutive.  The y-coordinate of all of these should be identical.
-
-  varying vec2 vUv;
-  // varying vec3 vPosition;
-  // varying vec3 vNormal;
-  // varying vec3 vViewDirection;
-
-uniform sampler2D tex; 
-
-
-void main() {
-  // find the input texture values
-
-  // float negToPos1 = vUv.x*2.0-1.0;
-  // vec3 enc = encodeValue(negToPos1);
-  // float psi = decodeValue(enc);
-  // psi = negToPos1;
-
-
-  vec4 raw = texture2D(tex,vUv);
-  float psi = decodeValue(raw.xyz)/4.0;
-
-
-  // gl_FragColor.rgb = mix(vec3(1.0,0.0,0.0),
-  //                    vec3(0.0,1.0,0.0),
-  //                    (psi+1.0)*0.5 );
-  
-
-  // gl_FragColor.a = 1.0;
-
-  if(raw.a==0.0) {
-   gl_FragColor = vec4( 1.0, 
-                        1.0, 
-                        1.0,
-                        1.0);
- 
-  } else {
-    gl_FragColor = vec4( psi/2.0 + 0.5, 
-                        0.0, 
-                        psi / 2.0 + 0.5, 
-                        1.0);
-  }               
-  // gl_FragColor.rgb = vec3(0.,0.,raw.z*100.);
-} 
-`;
-
-
-function test_encoder_decoder()
-{
-  for(var i=0;i<10;i++) {
-    var f = 1e3 * (Math.random()-0.5);
-    var enc = encode(f);
-    var dec = decode(enc);
-    console.log(f,enc,dec);
-  }
-}
-
 
 function Applet(element, options)
 {
@@ -570,21 +193,21 @@ function Applet(element, options)
 
   
   this.wavefronts = new THREE.Group();
-  this.linematerial = new THREE.LineMaterial( {color: 0x00ff00, linewidth:2, dashed: false });
+  this.linematerial = new THREE.LineMaterial( {color: 0x00ff00, linewidth:0.9, dashed: false });
   this.wavefront_geo = new THREE.LineGeometry();
-  this.wavefront_geo.setPositions([0,-0.5,10, 0,0.5,10]);
+  this.wavefront_geo.setPositions([0,-0.5,1, 0,0.5,1]);
   this.scene.add(this.wavefronts);
 
-  this.scatterfronts = new THREE.Group();
-  this.scattermaterial = new THREE.LineMaterial( {color: 0x00ff00, linewidth:1, dashed: true });
-  this.circle_geo = new THREE.LineGeometry();
-  var pts=[]; 
-  var npts = 1;
-  for(var i=0;i<=npts;i++) {
-    pts.push( Math.sin(2*Math.PI*i/npts), Math.cos(2*Math.PI*i/npts),2);
-  }
-  this.circle_geo.setPositions(pts);
-  this.scene.add(this.scatterfronts);
+  // this.scatterfronts = new THREE.Group();
+  // this.scattermaterial = new THREE.LineMaterial( {color: 0x00ff00, linewidth:1, dashed: true });
+  // this.circle_geo = new THREE.LineGeometry();
+  // var pts=[]; 
+  // var npts = 1;
+  // for(var i=0;i<=npts;i++) {
+  //   pts.push( Math.sin(2*Math.PI*i/npts), Math.cos(2*Math.PI*i/npts),2);
+  // }
+  // this.circle_geo.setPositions(pts);
+  // this.scene.add(this.scatterfronts);
 
 
   this.UpdateUniforms()
@@ -598,6 +221,11 @@ function Applet(element, options)
     self.last_frame_t = Date.now();
     if(self.animating) self.AnimationRender();
   })
+  $("#ctl-primary-wavefront").on("change",function(){
+      self.wavefronts.visible = $('#ctl-primary-wavefront').is(":checked");
+
+  })
+
 
   $("input[type='range']").on("change",this.UpdateUniforms.bind(this));
 
@@ -632,10 +260,10 @@ function Applet(element, options)
   //   });
 
 
+  this.wavefronts.visible = $('#ctl-primary-wavefront').is(":checked");
   this.AnimationRender();
 
-  this.wavefronts.visible = $('#ctl-primary-wavefront').is(":checked");
-  this.scatterfronts.visible = $('#ctl-scatter-wavefront').is("checked");
+  // this.scatterfronts.visible = $('#ctl-scatter-wavefront').is("checked");
 
 }
 
@@ -658,7 +286,7 @@ Applet.prototype.Resize = function()
   this.camera.updateProjectionMatrix();
 
   this.linematerial.resolution = this.resolution;
-  this.scattermaterial.resolution = this.resolution;
+  //this.scattermaterial.resolution = this.resolution;
   console.log("Resize",this.width,this.height);
 }
 
@@ -775,7 +403,7 @@ Applet.prototype.AnimationRender = function()
   this.renderer.render( this.scene, this.camera );
 
 
-  // this.SetPlaneWaveFronts(t);
+  this.SetPlaneWaveFronts(t);
   // this.SetScatterFronts(t);
 
   this.renderer.render( this.scene, this.camera );
@@ -792,33 +420,46 @@ function decodeValue(rgb,offset)
 }
 
 
-Applet.prototype.SetPlaneWaveFronts = function(t)
+Applet.prototype.SetPlaneWaveFronts = function()
 {
- 
-  // How many do we need?
-  var nlines =1./this.wavelength; // Screen is width 1, so this many wavelengths fit.
-  while(this.wavefronts.children.length < nlines) {
+  var t = this.frame_number;
+  var c = this.sim_material.uniforms.c.value;                             // pixels per frame
+  var frequency = this.sim_material.uniforms.plane_wave_frequency.value;  // rad per frame
+  var wavelength_p = c/frequency;         // in pixels
+  var wavelength = wavelength_p / this.width; // in THREE.js coordinates.
+
+  var start_x = 0.05; // must match renderer
+
+  // Speed in screen units per frame
+  var v = c/this.width;
+
+  // Move all existing lines one step forward.
+  for(line of this.wavefronts.children) {
+    line.position.x += v;
+  }
+
+  for(i = this.wavefronts.children.length-1; i>=0; i--) {
+    var line = this.wavefronts.children[i];
+    if(line.position.x > 1.0) this.wavefronts.remove(line);
+  }
+
+
+  // position of the first one:
+  var wt = frequency*t - start_x/wavelength  + 10*Math.PI;
+  var wt1 = frequency*(t+1) - start_x/wavelength  + 10*Math.PI;
+  if( (wt%(2*Math.PI))>=(Math.PI/2)  &&  (wt1%(2*Math.PI))<(Math.PI/2) ) {
+    // Time to start a new one.
+    console.log("adding wavefront",t,wt,(wt%(2*Math.PI)),(wt1%(2*Math.PI)));
     var line = new THREE.Line2(this.wavefront_geo, this.linematerial);
+    line.position.x = start_x;
+    line.visible=true;
     this.wavefronts.add(line);
   }
 
-  // too many?
-  while(this.wavefronts.children.length > nlines) {
-    var line = this.wavefronts.children[0];
-    this.wavefronts.remove(line);
-  }
+  // for(line of this.wavefronts.children) {
+  //   console.log(line.position.x);
+  // }
 
-  // position of the first one:
-  var x = (this.v*t-this.wavelength*0.25)%(this.wavelength);
-  for(line of this.wavefronts.children) {
-    line.position.x = x;
-    line.visible=true;
-    var reduced_time = (t-x/this.v);
-    if(reduced_time < 0 || reduced_time > this.tstop) line.visible=false; 
-    // if(x-this.v*t > 0) line.visible=false;
-
-    x+=this.wavelength;
-  }
 }
 
 Applet.prototype.SetScatterFronts = function(t)
