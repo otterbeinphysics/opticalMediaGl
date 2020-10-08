@@ -29,8 +29,10 @@ function Applet(element, options)
   var self = this;
 
   this.width  = $(this.element).width();
-  $(this.element).css("height",this.width);
-  this.height = this.width;
+  this.height  = $(this.element).height();
+  console.log("width,height",this.width,this.height)
+  // $(this.element).css("height",this.width);
+  // this.height = this.width;
   this.renderer = new THREE.WebGLRenderer();
   this.renderer.setSize(this.width,this.height);
   this.resolution = new THREE.Vector2(this.width,this.height);
@@ -198,16 +200,16 @@ function Applet(element, options)
   this.wavefront_geo.setPositions([0,-0.5,1, 0,0.5,1]);
   this.scene.add(this.wavefronts);
 
-  // this.scatterfronts = new THREE.Group();
-  // this.scattermaterial = new THREE.LineMaterial( {color: 0x00ff00, linewidth:1, dashed: true });
-  // this.circle_geo = new THREE.LineGeometry();
-  // var pts=[]; 
-  // var npts = 1;
-  // for(var i=0;i<=npts;i++) {
-  //   pts.push( Math.sin(2*Math.PI*i/npts), Math.cos(2*Math.PI*i/npts),2);
-  // }
-  // this.circle_geo.setPositions(pts);
-  // this.scene.add(this.scatterfronts);
+  this.scatterfronts = new THREE.Group();
+  this.scattermaterial = new THREE.LineMaterial( {color: 0x00ff00, linewidth:1, dashed: true });
+  this.circle_geo = new THREE.LineGeometry();
+  var pts=[]; 
+  var npts = 1;
+  for(var i=0;i<=npts;i++) {
+    pts.push( Math.sin(2*Math.PI*i/npts), Math.cos(2*Math.PI*i/npts),2);
+  }
+  this.circle_geo.setPositions(pts);
+  this.scene.add(this.scatterfronts);
 
 
   this.UpdateUniforms()
@@ -234,6 +236,11 @@ function Applet(element, options)
       self.t_ms = 0;
       self.frame_number=0;
       if(!self.animating) $("#ctl-animate").click();
+      if(self.wavefronts && self.wavefronts.children) 
+        for(i = self.wavefronts.children.length-1; i>=0; i--) {
+          var line = self.wavefronts.children[i]; 
+          self.wavefronts.remove(line);
+        }
   })
 
 
@@ -260,6 +267,19 @@ function Applet(element, options)
   //   });
 
 
+  document.addEventListener('keyup', function (event) {
+    if (event.defaultPrevented) {
+        return;
+    }
+    event.preventDefault();
+
+    var key = event.key || event.keyCode;
+
+    if (key === ' ' || key === 'Spacebar' || key === 62) {
+        $("#ctl-animate").click();
+    }
+  });
+
   this.wavefronts.visible = $('#ctl-primary-wavefront').is(":checked");
   this.AnimationRender();
 
@@ -272,7 +292,7 @@ function Applet(element, options)
 Applet.prototype.Resize = function()
 {
   this.width = $(this.element).width();
-  this.height = this.width;
+  this.height = $(this.element).height();
   $(this.element).css('height',this.height);
   // this.height = $(this.element).height(); 
 
@@ -309,6 +329,44 @@ Applet.prototype.UpdateUniforms = function()
 }
 
 
+Applet.prototype.CreatePositions = function()
+{
+  this.atoms=[];
+  while(this.atoms.length<2000) {
+      var x = Math.random()*this.width;
+      var y = Math.random()*this.height;
+      if(x<y) continue;
+      this.atoms.push([x,y]);
+  }
+  // this.atoms = [
+  //   [this.width/2,this.height/2]
+  // ];
+}
+Applet.prototype.CreateAtomPositionTexture = function()
+{
+  var size = this.width * this.height;
+  var data = new Uint8Array( 4 * size );
+  data.fill(0); 
+  for(var atom of this.atoms) {
+    var x = Math.floor(atom[0]);
+    var y = Math.floor(atom[1]);
+    // find the right row
+    var loc = 4 * ((this.width * y) + x);
+    var v = encode(0);
+    data[loc+0] = v[0];
+    data[loc+1] = v[1];
+    data[loc+2] = v[2];
+    data[loc+3] = 255;
+  }
+
+  return new THREE.DataTexture( data, this.width,this.height, THREE.RGBAFormat, undefined, 
+    THREE.ClampToEdgeWrapping,
+    THREE.ClampToEdgeWrapping,
+    THREE.NearestFilter,
+    THREE.NearestFilter);
+}
+
+
 Applet.prototype.AnimationRender = function()
 {
   var now = Date.now();
@@ -320,7 +378,6 @@ Applet.prototype.AnimationRender = function()
   this.last_frame_t = now; 
   var t = this.t_ms/1000;
 
-
   // speed of wave in pixels/frame
   // this.sim_material.uniforms.c.value = 0.4;
   this.sim_material.uniforms.width.value = this.width;
@@ -331,10 +388,18 @@ Applet.prototype.AnimationRender = function()
 
   // Set the buffer rotation. 
   // second
-  this.frame_number++; // advance the frane number
+  this.frame_number++; // advance the frame number
+  if(this.frame_number ==1) {
+    this.CreatePositions();
+    for(var i =0; i<3; i++) {
+      this.oscBufferTextures[i].texture.dispose();
+      this.oscBufferTextures[i].texture = this.CreateAtomPositionTexture();
+    }
+  }
+
   if(this.frame_number<4) {
     this.sim_material.uniforms.clear_flag.value = 1.0;//(this.frame<5)?1:0;
-    this.osc_material.uniforms.clear_flag.value = 1.0;//(this.frame<5)?1:0;
+    // this.osc_material.uniforms.clear_flag.value = 1.0;//(this.frame<5)?1:0;
   } else {
     this.sim_material.uniforms.clear_flag.value = 0;//(this.frame<5)?1:0;
     this.osc_material.uniforms.clear_flag.value = 0;//(this.frame<5)?1:0;
@@ -400,11 +465,11 @@ Applet.prototype.AnimationRender = function()
   // Now we can render the scene to screen:
   // console.log("render to screen");
   this.renderer.setRenderTarget(null);
-  this.renderer.render( this.scene, this.camera );
+  // this.renderer.render( this.scene, this.camera ); 
 
 
   this.SetPlaneWaveFronts(t);
-  // this.SetScatterFronts(t);
+  this.SetScatterFronts(t);
 
   this.renderer.render( this.scene, this.camera );
   // console.log("render");
@@ -444,9 +509,13 @@ Applet.prototype.SetPlaneWaveFronts = function()
   }
 
 
-  // position of the first one:
-  var wt = frequency*t - start_x/wavelength  + 10*Math.PI;
-  var wt1 = frequency*(t+1) - start_x/wavelength  + 10*Math.PI;
+
+  // at start_x, field = cos(wt)
+  // so, wavefront hits that at times wt=0, 2pi, 4pi, etc
+  // 
+
+  var wt = frequency*t  + 10*Math.PI;
+  var wt1 = frequency*(t+1)  + 10*Math.PI;
   if( (wt%(2*Math.PI))>=(Math.PI/2)  &&  (wt1%(2*Math.PI))<(Math.PI/2) ) {
     // Time to start a new one.
     console.log("adding wavefront",t,wt,(wt%(2*Math.PI)),(wt1%(2*Math.PI)));
@@ -455,6 +524,7 @@ Applet.prototype.SetPlaneWaveFronts = function()
     line.visible=true;
     this.wavefronts.add(line);
   }
+
 
   // for(line of this.wavefronts.children) {
   //   console.log(line.position.x);

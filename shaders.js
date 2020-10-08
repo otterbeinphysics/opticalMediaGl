@@ -56,28 +56,60 @@ varying vec2 vUv;
 // This is the version that encodes floating-point values.
 
 // Javascript test code to make sure theory is sound:
+// function encode(f)
+// {
+//   // Return three bytes of data as packed floating point representation
+//   var exponent = Math.floor(Math.log2(Math.abs(f)))+1;
+//   // clamp
+//   var coded_exponent = exponent+128;
+//   if(coded_exponent<0) coded_exponent = 0;
+//   if(coded_exponent>255) coded_exponent = 255;
+//   var divisor = 1<<exponent;
+//   var fraction = f/divisor; // Value between -1 and 1.  "Mantissa"
+//   var normfrac = (fraction/2.) + 0.5;  // Value between 0 and 1
+//   var high = Math.floor(255*normfrac);
+//   var low  = Math.floor((normfrac-high/255.)*65025);
+//   return[high,low,coded_exponent];
+// }
+
+// function decode(vec)
+// {
+//   var exponent = vec[2] -128;
+//   var divisor = 1<<exponent;
+//   var f = vec[0]/255;
+//   f += vec[1] / 65025;
+//   var signed = (f-0.5)*2.0;
+//   return signed * divisor;
+// }
+
+
 function encode(f)
 {
   // Return three bytes of data as packed floating point representation
   var exponent = Math.floor(Math.log2(Math.abs(f)))+1;
+  if(f==0) exponent = -128;
   // clamp
   var coded_exponent = exponent+128;
   if(coded_exponent<0) coded_exponent = 0;
   if(coded_exponent>255) coded_exponent = 255;
-  var divisor = 1<<exponent;
+  var divisor =  Math.pow(2,exponent);
   var fraction = f/divisor; // Value between -1 and 1.  "Mantissa"
   var normfrac = (fraction/2.) + 0.5;  // Value between 0 and 1
-  var high = Math.floor(255*normfrac);
-  var low  = Math.floor((normfrac-high/255.)*65025);
+  var high = Math.floor(256*normfrac);
+  var low  = Math.floor((normfrac-high/256.)*65536);
+  var report = {exponent,divisor,fraction,normfrac,high,low,coded_exponent};
+  console.log(JSON.stringify(report,null,2));
   return[high,low,coded_exponent];
 }
 
 function decode(vec)
 {
+  if(vec[2]==0) return 0;
+
   var exponent = vec[2] -128;
-  var divisor = 1<<exponent;
-  var f = vec[0]/255;
-  f += vec[1] / 65025;
+  var divisor = Math.pow(2,exponent);
+  var f = vec[0]/256;
+  f += vec[1] / 65536;
   var signed = (f-0.5)*2.0;
   return signed * divisor;
 }
@@ -101,6 +133,7 @@ precision mediump float;
 vec3 encodeValue(float f)
 {
   float exponent = floor(log2(abs(f)))+1.0;
+  if(f==0.0) exponent = -128.0;
   float coded_exponent = (exponent+128.0)/255.0;
   float divisor = exp2(exponent);
   float fraction = f/divisor;
@@ -123,6 +156,7 @@ vec3 encodeValue(float f)
 // Decode a vec3 rgb into a floating-point number.
 float decodeValue(vec3 v)
 {
+  if(v.z==0.0) return 0.;
   float exponent = (v.z*255.0)-128.0;
   float divisor = exp2(exponent);
   // divisor = 1.0;
@@ -177,9 +211,12 @@ void main() {
   // maps to inputtexture(u,v).  However, we're going to manipulate it:
   float newpsi;
 
-  if(vUv.x<0.05) {
+  if(vUv.x<0.05 && vUv.x>=0.04 && vUv.y>0.25 && vUv.y<0.75) {
         // Plane wave creator
-        newpsi = plane_wave_amplitude* sin(t* plane_wave_frequency);
+        newpsi = plane_wave_amplitude* cos(t* plane_wave_frequency);
+
+        newpsi = plane_wave_amplitude* cos(t* plane_wave_frequency);
+        
   
   } else {
 
@@ -204,12 +241,18 @@ void main() {
 
         float psidoubledot = divergence * c * c  - 0.00001*psi;
 
+
         // Damp down oscillations near the border of the window to prevent reflections.
         float edgex = min(vUv.x,1.0-vUv.x);
         float edgey = min(vUv.y,1.0-vUv.y);
         float edge = min(edgex,edgey);
         float damp = smoothstep(0.0,border,edge);
+
+        // very very mild restoring force
+        // damp += 0.01;
+
         psidoubledot -= psidot*(1.0-damp)*0.2;
+
 
         // oscillator pushes on field by difference in field height and oscillator height
         vec4 osc_raw = texture2D(tex_o2,vUv);
@@ -223,6 +266,7 @@ void main() {
 
         newpsi = psi + newpsidot;
 
+        if(clear_flag > 0.0) newpsi=0.0;
   }
 
 
@@ -231,7 +275,6 @@ void main() {
 
   
 
-  if(clear_flag > 0.0) newpsi=0.0;
   gl_FragColor.xyz = encodeValue(newpsi);
   gl_FragColor.a = 1.0;
   
