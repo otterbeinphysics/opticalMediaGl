@@ -225,7 +225,7 @@
         </div>
         <div style="margin:5px">
           <span id='show-amplitude' class="showval"></span>
-          <label><input id='ctl-amplitude' type="range" min="0.0" max="2.0" value="1.0" step="0.05" />Amplitude</label>
+          <label><input id='ctl-amplitude' type="range" min="0.0" max="2.0" value="0.0" step="0.05" />Amplitude</label>
         </div>
         <div style="margin:5px">
           <span id='show-speed' class="showval"></span>
@@ -254,7 +254,7 @@
         </div>
         <div style="margin:5px">
           <span id='show-beta' class="showval"></span>
-          <label><input id='ctl-beta' type="range" min="0" max="0.1" step="0.01"  value="0.01"/>&beta;</label>
+          <label><input id='ctl-beta' type="range" min="0" max="1.0" step="0.01"  value="0.01"/>&beta;</label>
         </div>
 
        <div style="margin:5px">
@@ -262,6 +262,12 @@
           <label><input id='ctl-x0' type="range" min="0" max="1.0" step="0.01"  value="0.0"/>x<sub>0</sub></label>
         </div>
 
+      </div>
+      <div class="control-grp">
+        <div>Frame Render Time <span class='frame-ms'></span> ms</div>
+        <div>FPS <span class='frame-fps'></span> </div>
+        <div>nat freq &omega;' = <span class='info-natural-frequency' /></div>
+        <div>crit damp at &beta; = <span class='info-crit-damp-beta' /></div>
       </div>
 
       <div class="control-grp">

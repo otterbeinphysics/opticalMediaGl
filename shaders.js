@@ -98,7 +98,7 @@ function encode(f)
   var high = Math.floor(256*normfrac);
   var low  = Math.floor((normfrac-high/256.)*65536);
   var report = {exponent,divisor,fraction,normfrac,high,low,coded_exponent};
-  console.log(JSON.stringify(report,null,2));
+  // console.log(JSON.stringify(report,null,2));
   return[high,low,coded_exponent];
 }
 
@@ -194,12 +194,13 @@ uniform float height;
 uniform sampler2D tex_t2; // Most recent frame
 uniform sampler2D tex_t1; // Second most recent frame.
 uniform sampler2D tex_o2; // Most recent frame containing oscillator data
-uniform sampler2D tex_o1; // Second most recent frame.
+// uniform sampler2D tex_o1; // Second most recent frame.
 uniform float t; // For wave generation
 
 uniform float plane_wave_frequency; // In rad/s, uses 't'
 uniform float plane_wave_amplitude; // In rad/s, uses 't'
 uniform float field_coupling;
+uniform float do_velocity; // Flag. 0 = position map, 1 = report velocity map
 
 precision mediump float;
 
@@ -209,13 +210,15 @@ void main() {
   // find the input texture values
   // vUv is the normalized U,V coordinate in the object which nominally
   // maps to inputtexture(u,v).  However, we're going to manipulate it:
-  float newpsi;
+  float newpsi;// =0.0;
+  float newpsidot;// =0.0;
 
   if(vUv.x<0.05 && vUv.x>=0.04 && vUv.y>0.25 && vUv.y<0.75) {
         // Plane wave creator
-        newpsi = plane_wave_amplitude* cos(t* plane_wave_frequency);
-
-        newpsi = plane_wave_amplitude* cos(t* plane_wave_frequency);
+        // newpsi = plane_wave_amplitude* cos(t* plane_wave_frequency);
+        float r = (vUv.y-0.5);
+        float beam_profile = exp(-r*r/0.05);
+        newpsi = plane_wave_amplitude*beam_profile* cos(t* plane_wave_frequency);
         
   
   } else {
@@ -231,15 +234,31 @@ void main() {
         vec2 vright = vec2(vUv.x + pixel.x, vUv.y);
         vec2 vbelow = vec2(vUv.x, vUv.y - pixel.y);
         vec2 vabove = vec2(vUv.x, vUv.y + pixel.y);
+
+        vec2 v_NE = vec2(vUv.x + pixel.x, vUv.y + pixel.y);
+        vec2 v_NW = vec2(vUv.x - pixel.x, vUv.y + pixel.y);
+        vec2 v_SE = vec2(vUv.x + pixel.x, vUv.y - pixel.y);
+        vec2 v_SW = vec2(vUv.x - pixel.x, vUv.y - pixel.y);
         
         float psi_left  = decodeValue(texture2D(tex_t2,vleft).xyz);
         float psi_right = decodeValue(texture2D(tex_t2,vright).xyz);
         float psi_below = decodeValue(texture2D(tex_t2,vbelow).xyz);
         float psi_above = decodeValue(texture2D(tex_t2,vabove).xyz);
+        // float psi_NE = decodeValue(texture2D(tex_t2,v_NE).xyz);
+        // float psi_NW = decodeValue(texture2D(tex_t2,v_NW).xyz);
+        // float psi_SE = decodeValue(texture2D(tex_t2,v_SE).xyz);
+        // float psi_SW = decodeValue(texture2D(tex_t2,v_SW).xyz);
 
-        float divergence = (psi_right-psi)-(psi-psi_left) + (psi_below-psi)-(psi-psi_above);
+        // https://en.wikipedia.org/wiki/Discrete_Laplace_operator has basically a filter kernel to do this.
+        // float laplacian = 0.5*(psi_left + psi_right + psi_below + psi_above )
+        //                 + 0.25*(psi_NE + psi_NW + psi_SE + psi_SW)
+        //                 - psi*3.0;
 
-        float psidoubledot = divergence * c * c  - 0.00001*psi;
+        //float laplacian = (psi_right-psi)-(psi-psi_left) + (psi_below-psi)-(psi-psi_above);
+        float laplacian = psi_left + psi_right + psi_below + psi_above
+                        - psi*4.0;
+
+        float psidoubledot = laplacian * c * c  - 0.00001*psi; // very mild restoring force.
 
 
         // Damp down oscillations near the border of the window to prevent reflections.
@@ -249,7 +268,7 @@ void main() {
         float damp = smoothstep(0.0,border,edge);
 
         // very very mild restoring force
-        // damp += 0.01;
+        // damp += 0.001;
 
         psidoubledot -= psidot*(1.0-damp)*0.2;
 
@@ -262,18 +281,16 @@ void main() {
           psidoubledot += field_coupling*(x-psi);
         }
 
-        float newpsidot = psidot + psidoubledot;
-
+        newpsidot = psidot + psidoubledot;
         newpsi = psi + newpsidot;
 
         if(clear_flag > 0.0) newpsi=0.0;
   }
 
 
+  if(do_velocity>0.)    gl_FragColor.xyz = encodeValue(newpsidot);
+  else                  gl_FragColor.xyz = encodeValue(newpsi);
 
- 
-
-  
 
   gl_FragColor.xyz = encodeValue(newpsi);
   gl_FragColor.a = 1.0;
@@ -307,6 +324,9 @@ uniform sampler2D tex_t2; // Most recent contianing the field values
 uniform sampler2D tex_o2; // Most recent frame containing oscillator data
 uniform sampler2D tex_o1; // Second most recent frame
 uniform float clear_flag; 
+uniform float t; 
+uniform float do_velocity; // Flag. 0 = position map, 1 = report velocity map
+
 float dt = 1.0;
 
 float random (vec2 st) {
@@ -317,26 +337,33 @@ float random (vec2 st) {
 
 void main() {
   // is the current pixel active? look at the alpha channel to see.
-  if(clear_flag>0.0) {
+  // if(clear_flag>0.0) {
 
-    // Find a few random spots to make opaque. Set to a large value for testing.
-    if( (vUv.x>0.4) && (random(vUv)>1.0-osc_density)) {
-          gl_FragColor.a = 1.0;
-          gl_FragColor.xyz = encodeValue(x0);
-    } else {
-          gl_FragColor.a = 0.0;
-          gl_FragColor.xyz = encodeValue(0.0);
-    }
+  //   // Find a few random spots to make opaque. Set to a large value for testing.
+  //   if( (vUv.x>0.4) && (random(vUv)>1.0-osc_density)) {
+  //         gl_FragColor.a = 1.0;
+  //         gl_FragColor.xyz = encodeValue(x0);
+  //   } else {
+  //         gl_FragColor.a = 0.0;
+  //         gl_FragColor.xyz = encodeValue(0.0);
+  //   }
 
-  } else {
+  // } else {
+
 
     vec4 rgba_n_2 = texture2D(tex_o2,vUv);
     if(rgba_n_2.a == 0.0) {
       // no resonanator here
+      // gl_FragColor.xyz = encodeValue(0.0);
+      // gl_FragColor.a = 0.;
       gl_FragColor=vec4(0.0, 0.0, 0.0, 0.0);
+
       return;
     }
 
+    // gl_FragColor.xyz = encodeValue(0.0);
+    // gl_FragColor.a = 1.;
+    // return;
     vec4 rgba_n_1 = texture2D(tex_o1,vUv);
 
     float x1 = decodeValue(rgba_n_1.xyz);
@@ -349,15 +376,17 @@ void main() {
     float xddot = 
                 w0*w0*(psi-x2) 
                 // - w0*w0*x2
-                - beta*xdot;
+                - beta*xdot
+                ;
     float new_xdot = xdot + xddot*dt;
     float new_x = x2 + new_xdot*dt;
 
-    gl_FragColor.xyz = encodeValue(new_x);
+    if(do_velocity>0.)    gl_FragColor.xyz = encodeValue(new_xdot);
+    else                  gl_FragColor.xyz = encodeValue(new_xdot);
     gl_FragColor.a = rgba_n_1.a;
 
   }
-} 
+// } 
 `;
 
 
