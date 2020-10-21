@@ -205,13 +205,14 @@ uniform float do_velocity; // Flag. 0 = position map, 1 = report velocity map
 precision mediump float;
 
 const float border = 0.04; // damp if this close to the edge (in screen fraction)
+const float dt = 1.0;
 
 void main() {
   // find the input texture values
   // vUv is the normalized U,V coordinate in the object which nominally
   // maps to inputtexture(u,v).  However, we're going to manipulate it:
-  float newpsi;// =0.0;
-  float newpsidot;// =0.0;
+  float newpsi =0.0;
+  float newpsidot =0.0;
 
   if(vUv.x<0.05 && vUv.x>=0.04 && vUv.y>0.25 && vUv.y<0.75) {
         // Plane wave creator
@@ -281,18 +282,18 @@ void main() {
           psidoubledot += field_coupling*(x-psi);
         }
 
-        newpsidot = psidot + psidoubledot;
-        newpsi = psi + newpsidot;
+        newpsidot = psidot + dt*psidoubledot;
+        newpsi = psi + dt*newpsidot;
 
         if(clear_flag > 0.0) newpsi=0.0;
   }
 
 
-  if(do_velocity>0.)    gl_FragColor.xyz = encodeValue(newpsidot);
-  else                  gl_FragColor.xyz = encodeValue(newpsi);
+  if(do_velocity>0.5)    gl_FragColor.xyz = encodeValue(newpsidot);
+  else                   gl_FragColor.xyz = encodeValue(newpsi);
 
 
-  gl_FragColor.xyz = encodeValue(newpsi);
+  // gl_FragColor.xyz = encodeValue(newpsi);
   gl_FragColor.a = 1.0;
   
 } 

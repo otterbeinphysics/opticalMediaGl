@@ -78,21 +78,20 @@ function Applet(element, options)
 
   this.do_rescatter = false;
 
-  // Offscreen buffer
-  this.bufferTextures = []
-  for(i=0;i<3;i++)
-      this.bufferTextures.push(
-        new THREE.WebGLRenderTarget(this.width,this.height, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,wrapS:THREE.ClampToEdgeWrapping, wrapT:THREE.ClampToEdgeWrapping}) 
-      );
+  // Offscreen buffers to hold wave state information.
+  this.psiBuffers = [];
+  this.psiDotBuffers = [];
+  // Offscreen buffers to hold oscilator state information.
+  this.oscBuffers = [];
+  this.oscDotBuffers = [];
+  newBuffer = () => new THREE.WebGLRenderTarget(this.width,this.height, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,wrapS:THREE.ClampToEdgeWrapping, wrapT:THREE.ClampToEdgeWrapping});
 
-
-   // Offscreen buffers for oscillators
-  this.oscBufferTextures = []
-  for(i=0;i<3;i++)
-      this.oscBufferTextures.push(
-        new THREE.WebGLRenderTarget(this.width,this.height, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,wrapS:THREE.ClampToEdgeWrapping, wrapT:THREE.ClampToEdgeWrapping}) 
-      );
-
+  for(i=0;i<3;i++) {
+      this.psiBuffers.push(newBuffer());
+      this.oscBuffers.push(newBuffer());
+      this.psiDotBuffers.push(newBuffer());
+      this.oscDotBuffers.push(newBuffer());
+  }
   this.frame_number = 0;
 
 
@@ -101,10 +100,10 @@ function Applet(element, options)
   this.bufferScene = new THREE.Scene();
 
   var sim_uniforms = {
-    tex_o2:  { type: "t", value: this.oscBufferTextures[0] },
-    tex_o1:  { type: "t", value: this.oscBufferTextures[1] },
-    tex_t2:  { type: "t", value: this.bufferTextures[0] },
-    tex_t1:  { type: "t", value: this.bufferTextures[1] },
+    tex_o2:  { type: "t", value: this.oscBuffers[0] },
+    tex_o1:  { type: "t", value: this.oscBuffers[1] },
+    tex_t2:  { type: "t", value: this.psiBuffers[0] },
+    tex_t1:  { type: "t", value: this.psiBuffers[1] },
     width:   {type: "f", value: this.width},
     height:  {type: "f", value: this.height},
     c:       {type: "f", value: 0},
@@ -132,10 +131,6 @@ function Applet(element, options)
   this.bufferScene.add(this.bufferscreen);
 
 
-
-
-
-
   // This is an identical mesh used to render to buffer:
   console.log("Constructing oscillator simulation material");
 
@@ -143,10 +138,10 @@ function Applet(element, options)
 
 
   var osc_uniforms = {
-    tex_o2:  { type: "t", value: this.oscBufferTextures[0] },
-    tex_o1:  { type: "t", value: this.oscBufferTextures[1] },
-    tex_t1:  { type: "t", value: this.bufferTextures[0] },
-    tex_t2:  { type: "t", value: this.bufferTextures[0] },
+    tex_o2:  { type: "t", value: this.oscBuffers[0] },
+    tex_o1:  { type: "t", value: this.oscBuffers[1] },
+    tex_t1:  { type: "t", value: this.psiBuffers[0] },
+    tex_t2:  { type: "t", value: this.psiBuffers[0] },
     osc_density: { type: "t", value: 0.001 }, // fraction of pixels with an oscillator
     w0:   {type: "f", value: 0.11}, // resonating frequency, in rad/frame
     beta:  {type: "f", value: 0.01}, // damping factor
@@ -177,7 +172,7 @@ function Applet(element, options)
   console.log("Constructing display material");
 
   var disp_uniforms = {
-    tex: { type: "t", value: this.bufferTextures[2] },
+    tex: { type: "t", value: this.psiBuffers[2] },
   };
 
  
@@ -230,6 +225,7 @@ function Applet(element, options)
   })
   $("#ctl-primary-wavefront").on("change",function(){
       self.wavefronts.visible = $('#ctl-primary-wavefront').is(":checked");
+      self.scatterfronts.visible = $('#ctl-primary-wavefront').is(":checked");
 
   })
 
@@ -241,8 +237,7 @@ function Applet(element, options)
       self.t_ms = 0;
       self.frame_number=0;
       self.CreatePositions();
-      if(self.atomTexture) self.atomTexture.dispose();
-      self.atomTexture = self.CreateAtomPositionTexture();
+      self.CreateAtomPositionTexture();
 
       if(!self.animating) $("#ctl-animate").click();
       if(self.wavefronts && self.wavefronts.children) 
@@ -289,14 +284,13 @@ function Applet(element, options)
     }
   });
 
-  this.scatterfronts.visible = true;//$('#ctl-scatter-wavefront').is("checked");
+  this.scatterfronts.visible =  $('#ctl-primary-wavefront').is(":checked");//$('#ctl-scatter-wavefront').is("checked");
   this.wavefronts.visible = $('#ctl-primary-wavefront').is(":checked");
 
 
   // create atom positions and starting texture
   this.CreatePositions();
-  if(this.atomTexture) this.atomTexture.dispose();
-  this.atomTexture = this.CreateAtomPositionTexture();
+  this.CreateAtomPositionTexture();
 
   this.AnimationRender();
 
@@ -421,6 +415,9 @@ Applet.prototype.CreatePositions = function()
 Applet.prototype.CreateAtomPositionTexture = function()
 {
   console.log("AtomTexture");
+  if(this.atomTexture) this.atomTexture.dispose();
+  if(this.atomVelocityTexture) this.atomTexture.dispose();
+     
   var size = this.width * this.height;
   var data = new Uint8Array( 4 * size );
   data.fill(0); 
@@ -436,12 +433,23 @@ Applet.prototype.CreateAtomPositionTexture = function()
     data[loc+3] = 255;
   }
 
-  return new THREE.DataTexture( data, this.width,this.height, 
+  this.atomTexture = new THREE.DataTexture( data, this.width,this.height, 
       THREE.RGBAFormat,  THREE.UnsignedByteType, 
     THREE.ClampToEdgeWrapping,
     THREE.ClampToEdgeWrapping,
     THREE.NearestFilter,
     THREE.NearestFilter);
+
+  // Set all initial oscillator velocities to zero.
+  // Try using a 1x1 pixel grid, since it's all zeros anyway.
+  var vdata = new Uint8Array(4);
+  vdata.fill(0);
+  this.atomVelocityTexture =new THREE.DataTexture( vdata, 1, 1, 
+      THREE.RGBAFormat,  THREE.UnsignedByteType, 
+    THREE.ClampToEdgeWrapping,
+    THREE.ClampToEdgeWrapping,
+    THREE.NearestFilter,
+    THREE.NearestFilter);   
 }
 
 
@@ -480,16 +488,17 @@ Applet.prototype.AnimationRender = function()
     // this.osc_material.uniforms.clear_flag.value = 0;//(this.frame<5)?1:0;
   }
 
-  var f0 = (this.frame_number%3);
-  var f1 = (this.frame_number+1)%3;
-  var f2 = (this.frame_number+2)%3;
+  var f0 = (this.frame_number%3);    // f0 is the second most recent buffer.
+  var f1 = (this.frame_number+1)%3;  // f1 is the most recent buffer.
+  var f2 = (this.frame_number+2)%3;  // We're rendering to buffer f2.
 
-  var render_to_buffer_no = (this.frame_number+2)%3
+
 
 
   // console.log("render to oscillators buffer");
-  this.osc_material.uniforms.tex_o1.value = this.oscBufferTextures[f0].texture;      // oldest frame
-  this.osc_material.uniforms.tex_o2.value = this.oscBufferTextures[f1].texture; // most recent frame
+  this.osc_material.uniforms.t.value = this.frame_number; // most recent frame
+  this.osc_material.uniforms.tex_o1.value = this.oscBuffers[f0].texture;      // oldest frame
+  this.osc_material.uniforms.tex_o2.value = this.oscBuffers[f1].texture; // most recent frame
 
   // override when booting up.
   if(this.frame_number<=3) {
@@ -497,37 +506,45 @@ Applet.prototype.AnimationRender = function()
       this.osc_material.uniforms.tex_o2.value = this.atomTexture;
   }
 
-  this.osc_material.uniforms.tex_t2.value = this.bufferTextures[f1].texture;      // most recent field frame
+  this.osc_material.uniforms.tex_t2.value = this.psiBuffers[f1].texture;      // most recent field frame
 
-  this.renderer.setRenderTarget(this.oscBufferTextures[f2]);
+  // Render to the velocity map.
+  this.osc_material.uniforms.do_velocity.value = 1.0;
+  this.renderer.setRenderTarget(this.oscDotBuffers[f2]);
   this.renderer.render(this.oscBufferScene, this.camera);
 
+  // Render to the position map.
+  this.osc_material.uniforms.do_velocity.value = 0;
+  this.renderer.setRenderTarget(this.oscBuffers[f2]);
+  this.renderer.render(this.oscBufferScene, this.camera);
 
+  // Now simulate the scalar field.
 
-  // this.sim_material.uniforms.tex_o1.value = this.oscBufferTextures[f2].texture;     // most recent frame
-  this.sim_material.uniforms.tex_o2.value = this.oscBufferTextures[f2].texture;     // most recent frame
-  this.sim_material.uniforms.tex_t1.value = this.bufferTextures[f0].texture;      // oldest frame
-  this.sim_material.uniforms.tex_t2.value = this.bufferTextures[f1].texture; // most recent frame
-  //var render_to_buffer = this.bufferTextures[(this.frame_number+2)%3];                 // frame we're rendering into.
+  // this.sim_material.uniforms.tex_o1.value = this.oscBuffers[f2].texture;     // most recent frame
+  this.sim_material.uniforms.tex_o2.value = this.oscBuffers[f2].texture;     // most recent frame
+  this.sim_material.uniforms.tex_t1.value = this.psiBuffers[f0].texture;      // oldest frame
+  this.sim_material.uniforms.tex_t2.value = this.psiBuffers[f1].texture; // most recent frame
+  //var render_to_buffer = this.psiBuffers[(this.frame_number+2)%3];                 // frame we're rendering into.
 
   this.sim_material.uniforms.t.value = this.frame_number; // most recent frame
-  this.osc_material.uniforms.t.value = this.frame_number; // most recent frame
   
-  // console.log('render t=',t,'frame =',this.frame_number);
-
-  // console.log("render to simulation buffer");
-  this.renderer.setRenderTarget(this.bufferTextures[render_to_buffer_no]);
+  // Render to the velocity map.
+  this.sim_material.uniforms.do_velocity.value = 1.0;
+  this.renderer.setRenderTarget(this.psiDotBuffers[f2]);
   this.renderer.render(this.bufferScene, this.camera);
 
-
+  // Render to the position map
+  this.sim_material.uniforms.do_velocity.value = 0;
+  this.renderer.setRenderTarget(this.psiBuffers[f2]);
+  this.renderer.render(this.bufferScene, this.camera);
 
 
 
   // Now map the output to the screen:
   if($('#ctl-osc').is(":checked"))
-   this.disp_material.uniforms.tex.value = this.bufferTextures[render_to_buffer_no].texture;
+   this.disp_material.uniforms.tex.value = this.psiBuffers[f2].texture;
   else
-   this.disp_material.uniforms.tex.value = this.oscBufferTextures[f2].texture;
+   this.disp_material.uniforms.tex.value = this.psiDotBuffers[f2].texture;
 
   // pull values from specific pixels.
   var gl = this.renderer.getContext();
@@ -553,7 +570,7 @@ Applet.prototype.AnimationRender = function()
 
   this.SetPlaneWaveFronts(t);
   this.SetScatterFronts(t);
-  this.scatterfronts.visible = true;
+  // this.scatterfronts.visible = true;
 
   this.renderer.render( this.scene, this.camera );
 
