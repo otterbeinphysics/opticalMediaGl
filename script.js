@@ -100,10 +100,10 @@ function Applet(element, options)
   this.bufferScene = new THREE.Scene();
 
   var sim_uniforms = {
-    tex_o2:  { type: "t", value: this.oscBuffers[0] },
-    tex_o1:  { type: "t", value: this.oscBuffers[1] },
-    tex_t2:  { type: "t", value: this.psiBuffers[0] },
-    tex_t1:  { type: "t", value: this.psiBuffers[1] },
+    tex_osc:     { type: "t", value: this.oscBuffers[0] },
+    tex_oscdot:  { type: "t", value: this.oscDotBuffers[0] },
+    tex_psi:     { type: "t", value: this.psiBuffers[0] },
+    tex_psidot:  { type: "t", value: this.psiDotBuffers[0] },
     width:   {type: "f", value: this.width},
     height:  {type: "f", value: this.height},
     c:       {type: "f", value: 0},
@@ -138,10 +138,10 @@ function Applet(element, options)
 
 
   var osc_uniforms = {
-    tex_o2:  { type: "t", value: this.oscBuffers[0] },
-    tex_o1:  { type: "t", value: this.oscBuffers[1] },
-    tex_t1:  { type: "t", value: this.psiBuffers[0] },
-    tex_t2:  { type: "t", value: this.psiBuffers[0] },
+    tex_osc:     { type: "t", value: this.oscBuffers[0] },
+    tex_oscdot:  { type: "t", value: this.oscDotBuffers[0] },
+    tex_psi:     { type: "t", value: this.psiBuffers[0] },
+    tex_psidot:  { type: "t", value: this.psiDotBuffers[0] },
     osc_density: { type: "t", value: 0.001 }, // fraction of pixels with an oscillator
     w0:   {type: "f", value: 0.11}, // resonating frequency, in rad/frame
     beta:  {type: "f", value: 0.01}, // damping factor
@@ -497,16 +497,15 @@ Applet.prototype.AnimationRender = function()
 
   // console.log("render to oscillators buffer");
   this.osc_material.uniforms.t.value = this.frame_number; // most recent frame
-  this.osc_material.uniforms.tex_o1.value = this.oscBuffers[f0].texture;      // oldest frame
-  this.osc_material.uniforms.tex_o2.value = this.oscBuffers[f1].texture; // most recent frame
+  this.osc_material.uniforms.tex_osc.value    = this.oscBuffers[f1].texture;      // oldest frame
+  this.osc_material.uniforms.tex_oscdot.value = this.oscDotBuffers[f1].texture; // most recent frame
+  this.osc_material.uniforms.tex_psi.value    = this.psiBuffers[f1].texture;      // most recent field frame
 
   // override when booting up.
   if(this.frame_number<=3) {
-      this.osc_material.uniforms.tex_o1.value = this.atomTexture;
-      this.osc_material.uniforms.tex_o2.value = this.atomTexture;
+      this.osc_material.uniforms.tex_osc.value = this.atomTexture;
+      this.osc_material.uniforms.tex_oscdot.value = this.atomVelocityTexture;
   }
-
-  this.osc_material.uniforms.tex_t2.value = this.psiBuffers[f1].texture;      // most recent field frame
 
   // Render to the velocity map.
   this.osc_material.uniforms.do_velocity.value = 1.0;
@@ -521,12 +520,10 @@ Applet.prototype.AnimationRender = function()
   // Now simulate the scalar field.
 
   // this.sim_material.uniforms.tex_o1.value = this.oscBuffers[f2].texture;     // most recent frame
-  this.sim_material.uniforms.tex_o2.value = this.oscBuffers[f2].texture;     // most recent frame
-  this.sim_material.uniforms.tex_t1.value = this.psiBuffers[f0].texture;      // oldest frame
-  this.sim_material.uniforms.tex_t2.value = this.psiBuffers[f1].texture; // most recent frame
-  //var render_to_buffer = this.psiBuffers[(this.frame_number+2)%3];                 // frame we're rendering into.
-
   this.sim_material.uniforms.t.value = this.frame_number; // most recent frame
+  this.sim_material.uniforms.tex_osc.value    = this.oscBuffers[f2].texture;     // most recent osc buffer, freshly computed.
+  this.sim_material.uniforms.tex_psi.value    = this.psiBuffers[f1].texture;      // most recent psi buffer
+  this.sim_material.uniforms.tex_psidot.value = this.psiDotBuffers[f1].texture;  // most recent psidot buffer
   
   // Render to the velocity map.
   this.sim_material.uniforms.do_velocity.value = 1.0;

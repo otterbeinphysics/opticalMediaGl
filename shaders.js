@@ -191,10 +191,9 @@ uniform float clear_flag;
 uniform float c;  // speed of wave, in pixels per frame
 uniform float width;  // size of input textures, in pixels
 uniform float height;
-uniform sampler2D tex_t2; // Most recent frame
-uniform sampler2D tex_t1; // Second most recent frame.
-uniform sampler2D tex_o2; // Most recent frame containing oscillator data
-// uniform sampler2D tex_o1; // Second most recent frame.
+uniform sampler2D tex_psi; // Most recent frame
+uniform sampler2D tex_psidot; // Most recent velocity frame
+uniform sampler2D tex_osc; // Most recent frame containing oscillator data
 uniform float t; // For wave generation
 
 uniform float plane_wave_frequency; // In rad/s, uses 't'
@@ -225,9 +224,8 @@ void main() {
   } else {
 
         // find the last two samples at THIS position.
-        float psi = decodeValue(texture2D(tex_t2,vUv).xyz);
-        float psi_last = decodeValue(texture2D(tex_t1,vUv).xyz);
-        float psidot = psi - psi_last;
+        float psi = decodeValue(texture2D(tex_psi,vUv).xyz);
+        float psidot = decodeValue(texture2D(tex_psidot,vUv).xyz);
 
         // Find the values left, right, top, bottom in most recent texture.
         vec2 pixel = vec2(1.0/width,1.0/height);
@@ -241,14 +239,14 @@ void main() {
         vec2 v_SE = vec2(vUv.x + pixel.x, vUv.y - pixel.y);
         vec2 v_SW = vec2(vUv.x - pixel.x, vUv.y - pixel.y);
         
-        float psi_left  = decodeValue(texture2D(tex_t2,vleft).xyz);
-        float psi_right = decodeValue(texture2D(tex_t2,vright).xyz);
-        float psi_below = decodeValue(texture2D(tex_t2,vbelow).xyz);
-        float psi_above = decodeValue(texture2D(tex_t2,vabove).xyz);
-        // float psi_NE = decodeValue(texture2D(tex_t2,v_NE).xyz);
-        // float psi_NW = decodeValue(texture2D(tex_t2,v_NW).xyz);
-        // float psi_SE = decodeValue(texture2D(tex_t2,v_SE).xyz);
-        // float psi_SW = decodeValue(texture2D(tex_t2,v_SW).xyz);
+        float psi_left  = decodeValue(texture2D(tex_psi,vleft).xyz);
+        float psi_right = decodeValue(texture2D(tex_psi,vright).xyz);
+        float psi_below = decodeValue(texture2D(tex_psi,vbelow).xyz);
+        float psi_above = decodeValue(texture2D(tex_psi,vabove).xyz);
+        // float psi_NE = decodeValue(texture2D(tex_psi,v_NE).xyz);
+        // float psi_NW = decodeValue(texture2D(tex_psi,v_NW).xyz);
+        // float psi_SE = decodeValue(texture2D(tex_psi,v_SE).xyz);
+        // float psi_SW = decodeValue(texture2D(tex_psi,v_SW).xyz);
 
         // https://en.wikipedia.org/wiki/Discrete_Laplace_operator has basically a filter kernel to do this.
         // float laplacian = 0.5*(psi_left + psi_right + psi_below + psi_above )
@@ -275,9 +273,9 @@ void main() {
 
 
         // oscillator pushes on field by difference in field height and oscillator height
-        vec4 osc_raw = texture2D(tex_o2,vUv);
+        vec4 osc_raw = texture2D(tex_osc,vUv);
         float x;
-        if(osc_raw.a > 0.5 && edge>border) {
+        if(osc_raw.a > 0. && edge>border) {
           x = decodeValue(osc_raw.xyz);
           psidoubledot += field_coupling*(x-psi);
         }
@@ -321,9 +319,9 @@ uniform float w0; // resonating frequency, in rad/frame
 uniform float beta; // damping factor
 uniform float x0; // starting value;
 
-uniform sampler2D tex_t2; // Most recent contianing the field values
-uniform sampler2D tex_o2; // Most recent frame containing oscillator data
-uniform sampler2D tex_o1; // Second most recent frame
+uniform sampler2D tex_psi; // Most recent contianing the field values
+uniform sampler2D tex_osc; // Most recent frame containing oscillator data
+uniform sampler2D tex_oscdot; // Most recent frame containing oscillator velocities.
 uniform float clear_flag; 
 uniform float t; 
 uniform float do_velocity; // Flag. 0 = position map, 1 = report velocity map
@@ -352,8 +350,8 @@ void main() {
   // } else {
 
 
-    vec4 rgba_n_2 = texture2D(tex_o2,vUv);
-    if(rgba_n_2.a == 0.0) {
+    vec4 rgba_osc = texture2D(tex_osc,vUv);
+    if(rgba_osc.a == 0.0) {
       // no resonanator here
       // gl_FragColor.xyz = encodeValue(0.0);
       // gl_FragColor.a = 0.;
@@ -365,26 +363,22 @@ void main() {
     // gl_FragColor.xyz = encodeValue(0.0);
     // gl_FragColor.a = 1.;
     // return;
-    vec4 rgba_n_1 = texture2D(tex_o1,vUv);
 
-    float x1 = decodeValue(rgba_n_1.xyz);
-    float x2 = decodeValue(rgba_n_2.xyz);
-    // float E1 = decodeValue(texture2D(tex_t1,vUv).xyz);
-    float psi = decodeValue(texture2D(tex_t2,vUv).xyz);
+    float x= decodeValue(rgba_osc.xyz);
+    float xdot = decodeValue(texture2D(tex_oscdot,vUv).xyz);
+    float psi  = decodeValue(texture2D(tex_psi,vUv).xyz);
 
-    float xdot = (x2-x1)/dt;
     // force on an oscillator:
     float xddot = 
-                w0*w0*(psi-x2) 
-                // - w0*w0*x2
+                w0*w0*(psi-x) 
                 - beta*xdot
                 ;
     float new_xdot = xdot + xddot*dt;
-    float new_x = x2 + new_xdot*dt;
+    float new_x = x + new_xdot*dt;
 
     if(do_velocity>0.)    gl_FragColor.xyz = encodeValue(new_xdot);
     else                  gl_FragColor.xyz = encodeValue(new_xdot);
-    gl_FragColor.a = rgba_n_1.a;
+    gl_FragColor.a = rgba_osc.a;
 
   }
 // } 
