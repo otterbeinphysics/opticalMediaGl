@@ -60,16 +60,25 @@
     margin:10px;
     border: 1px solid;
     z-index: 3;
-    overflow-x:none;
+    /*overflow-x:none;*/
     
     pointer-events:none;
     -moz-user-select: none; -webkit-user-select: none; -ms-user-select:none; user-select:none;
     background-color: white;
+    display: flex;
+    flex-flow: row wrap;
+    /*white-space: nowrap;*/
+    /*height: 400px;*/
   }
+
   input, button, label, select {
     pointer-events:all;
   }
 
+  #controls label {
+    text-align: right;
+  }
+ 
   .bttn {
     pointer-events:all;  
   }
@@ -195,6 +204,8 @@
     position: relative;
     display: inline-block;
     padding-top: 10px;
+    min-width:200px;
+    /*width: 300px;*/
   }
   .control-hdr {
     position: absolute;
@@ -207,6 +218,7 @@
     width:35px;
     display:inline-block;
     jusify-content: right;
+    text-align:right;
   }
   </style>
 
@@ -221,54 +233,91 @@
         <span class="control-hdr"> Incoming wave: </span>
         <div style="margin:5px">
           <span id='show-frequency' class="showval"></span>
-          <label><input id='ctl-frequency' type="range" min="0.01" max="0.3" step="0.01" value="0.1" />Frequency (rad/frame)</label>
+          <label><input id='ctl-frequency' type="range" min="0.01" max="0.3" step="0.01" value="0.05" />Frequency (rad/frame)</label>
         </div>
         <div style="margin:5px">
           <span id='show-amplitude' class="showval"></span>
-          <label><input id='ctl-amplitude' type="range" min="0.0" max="2.0" value="0.0" step="0.05" />Amplitude</label>
+          <label><input id='ctl-amplitude' type="range" min="0.0" max="2.0" value="1.0" step="0.05" />Amplitude</label>
         </div>
         <div style="margin:5px">
           <span id='show-speed' class="showval"></span>
           <label><input id='ctl-speed' type="range" min="0.05" max="0.5" value="0.4" step='0.05' />Speed (pix/frame)</label>
-      </div>
-      <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-primary-wavefront" />Highlight wavefronts</label></div>
-
-
-    </div>
-
-      <div class="control-grp">
-        <span class="control-hdr"> Scatterers: </span>
-
-        <div style="margin:5px">
-          <span id='show-density' class="showval"></span>
-          <label><input id='ctl-density' type="range" min="0.0" max="0.005" step="0.0002" value="0.0005" />Density</label>
         </div>
         <div style="margin:5px">
+          <span id='show-beam-width' class="showval"></span>
+          <label><input id='ctl-beam-width' type="range" min="0.0" max="0.1" value="0.02" step='0.001' />Beam Width</label>
+        </div>
+
+
+      </div>
+
+      <div class="control-grp">
+        <span class="control-hdr"> Atoms: </span>
+
+        <div style="margin:5px">
           <span id='show-field-coupling' class="showval"></span>
-          <label><input id='ctl-field-coupling' type="range" min="0.0" max="2.0" step="0.05" value="1.0" />Field Coupling</label>
+          <label><input id='ctl-field-coupling' type="range" min="0.0" max="2.0" step="0.05" value="0.5" />Field Coupling</label>
         </div>
 
         <div style="margin:5px">
           <span id='show-w0' class="showval"></span>
-          <label><input id='ctl-w0' type="range" min="0.01" max="0.95" step="0.01" value="0.2" />&omega;<sub>0</sub></label>
+          <label><input id='ctl-w0' type="range" min="0.01" max="0.95" step="0.01" value="0.15" />&omega;<sub>0</sub></label>
         </div>
         <div style="margin:5px">
           <span id='show-beta' class="showval"></span>
-          <label><input id='ctl-beta' type="range" min="0" max="1.0" step="0.01"  value="0.01"/>&beta;</label>
+          <label><input id='ctl-beta' type="range" min="0" max="0.2" step="0.001"  value="0.01"/>&beta;</label>
         </div>
 
-       <div style="margin:5px">
+        <div style="display:none; margin:5px">
           <span id='show-x0' class="showval"></span>
           <label><input id='ctl-x0' type="range" min="0" max="1.0" step="0.01"  value="0.0"/>x<sub>0</sub></label>
         </div>
 
+   
       </div>
+
       <div class="control-grp">
+        <span class="control-hdr"> Geometry: </span>
+
+         <div style="margin:5px">
+            <span id='show-atom-n' class="showval"></span>
+            <label><input id='ctl-atom-n'  class="reset" type="range" min="0" max="2000" step="10"  value="1000"/>Number of atoms</label>
+          </div>
+         <div style="margin:5px">
+            <span id='show-slab-w' class="showval"></span>
+            <label><input id='ctl-slab-w' class="reset" type="range" min="0" max="1.2" step="0.1"  value="0.4"/>Slab width</label>
+        </div>
+         <div style="margin:5px">
+            <span id='show-slab-h' class="showval"></span>
+            <label><input id='ctl-slab-h' class="reset" type="range" min="0" max="1.2" step="0.1"  value="1"/>Slab height</label>
+        </div>
+        <div style="margin:5px">
+            <span id='show-slab-angle' class="showval"></span>&deg;
+            <label><input id='ctl-slab-angle' class="reset" type="range" min="-90" max="90" step="5"  value="25"/>Slab angle</label>
+        </div>
+      </div>
+
+      <div class="control-grp">
+        <span class="control-hdr"> Simulation state: </span>
+
         <div>Frame Render Time <span class='frame-ms'></span> ms</div>
         <div>FPS <span class='frame-fps'></span> </div>
         <div>nat freq &omega;' = <span class='info-natural-frequency' /></div>
         <div>crit damp at &beta; = <span class='info-crit-damp-beta' /></div>
+        <div>phase lag = <span class='info-phase-lag' /></div>
       </div>
+
+
+     <div class="control-grp">
+        <span class="control-hdr"> Show: </span>
+
+        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-show-scatterers" />Atom positions</label></div>
+        
+        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-primary-wavefront" />Wavefront guides</label></div>
+
+        <div style="margin:5px"><label><input type ="checkbox" checked="checked" id="ctl-osc" />Field (or oscillators_</label></div>
+    </div>
+
 
       <div class="control-grp">
         <span class="control-hdr"> Run: </span>

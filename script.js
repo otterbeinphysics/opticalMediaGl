@@ -81,9 +81,12 @@ function Applet(element, options)
   // Offscreen buffers to hold wave state information.
   this.psiBuffers = [];
   this.psiDotBuffers = [];
+  // this.psiDdotBuffers = [];
   // Offscreen buffers to hold oscilator state information.
   this.oscBuffers = [];
   this.oscDotBuffers = [];
+  // this.oscDdotBuffers = [];
+
   newBuffer = () => new THREE.WebGLRenderTarget(this.width,this.height, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,wrapS:THREE.ClampToEdgeWrapping, wrapT:THREE.ClampToEdgeWrapping});
 
   for(i=0;i<3;i++) {
@@ -91,6 +94,8 @@ function Applet(element, options)
       this.oscBuffers.push(newBuffer());
       this.psiDotBuffers.push(newBuffer());
       this.oscDotBuffers.push(newBuffer());
+      // this.psiDdotBuffers.push(newBuffer());
+      // this.oscDdotBuffers.push(newBuffer());
   }
   this.frame_number = 0;
 
@@ -104,15 +109,17 @@ function Applet(element, options)
     tex_oscdot:  { type: "t", value: this.oscDotBuffers[0] },
     tex_psi:     { type: "t", value: this.psiBuffers[0] },
     tex_psidot:  { type: "t", value: this.psiDotBuffers[0] },
+    // tex_psiddot:  { type: "t", value: this.psiDdotBuffers[0] },
     width:   {type: "f", value: this.width},
     height:  {type: "f", value: this.height},
     c:       {type: "f", value: 0},
     plane_wave_frequency: {type: "f", value: 0.1},
     plane_wave_amplitude: {type: "f", value: 1.0},
     field_coupling: {type: "f", value: 1.0},
+    beam_width: {type: "f", value: 0.01},
     clear_flag:   {type: "f", value: 0},
     t:         { type: "f", value: 0},    
-    do_velocity: {type: "f", value: 0},
+    output_mode: {type: "i", value: 0},
   }
 
  this.sim_material = new THREE.RawShaderMaterial( {
@@ -140,15 +147,16 @@ function Applet(element, options)
   var osc_uniforms = {
     tex_osc:     { type: "t", value: this.oscBuffers[0] },
     tex_oscdot:  { type: "t", value: this.oscDotBuffers[0] },
+    // tex_oscddot:  { type: "t", value: this.oscDdotBuffers[0] },
     tex_psi:     { type: "t", value: this.psiBuffers[0] },
     tex_psidot:  { type: "t", value: this.psiDotBuffers[0] },
-    osc_density: { type: "t", value: 0.001 }, // fraction of pixels with an oscillator
+    osc_density: { type: "f", value: 0.001 }, // fraction of pixels with an oscillator
     w0:   {type: "f", value: 0.11}, // resonating frequency, in rad/frame
     beta:  {type: "f", value: 0.01}, // damping factor
     x0: {type:"f", value: 0}, // starting value for the ocillators
     clear_flag:   {type: "f", value: 0},
     t: {type: "f", value: 0},
-    do_velocity: {type: "f", value: 0},
+    output_mode: {type: "i", value: 0},
   }
 
   this.osc_material = new THREE.RawShaderMaterial( {
@@ -172,7 +180,11 @@ function Applet(element, options)
   console.log("Constructing display material");
 
   var disp_uniforms = {
+    blur: { type: "f", value: 0.0 },
     tex: { type: "t", value: this.psiBuffers[2] },
+    width:   {type: "f", value: this.width},
+    height:  {type: "f", value: this.height},
+    scale:   {type: "f", value: 1.0}
   };
 
  
@@ -199,13 +211,13 @@ function Applet(element, options)
   this.scene.add(this.wavefronts);
 
   this.scatterfronts = new THREE.Group();
-  this.scattermaterial = new THREE.LineMaterial( {color: 0x00ff00, linewidth:0.001, dashed: false });
+  this.scattermaterial = new THREE.LineMaterial( {color: 0x00ff00, linewidth:0.002, dashed: false });
   this.circle_geo = new THREE.LineGeometry();
   var pts=[]; 
   var npts = 20;
   this.r0 = 1; 
   for(var i=0;i<=npts;i++) {
-    pts.push( this.r0*Math.sin(2*Math.PI*i/npts), this.r0*Math.cos(2*Math.PI*i/npts),0.1);
+    pts.push( this.r0*Math.sin(2*Math.PI*i/npts), this.r0*Math.cos(2*Math.PI*i/npts),2);
   }
   console.log("pts",pts);
   this.circle_geo.setPositions(pts);
@@ -225,28 +237,33 @@ function Applet(element, options)
   })
   $("#ctl-primary-wavefront").on("change",function(){
       self.wavefronts.visible = $('#ctl-primary-wavefront').is(":checked");
-      self.scatterfronts.visible = $('#ctl-primary-wavefront').is(":checked");
+  })
+  $("#ctl-show-scatterers").on("change",function(){
+      self.scatterfronts.visible = $('#ctl-show-scatterers').is(":checked");
 
   })
+  
 
+  function update_showval(ctl) {
+    var id = $(ctl).attr("id");
+    var showval = id.replace('ctl-','show-');
+    $('#'+showval+".showval").text($(ctl).val());
+    console.log('update_showval',ctl,showval,$(ctl).val());
+
+  }
+
+  $("input[type='range']")
+    .on("input",function(ev){
+      update_showval(this);
+     })
+    .each(function(){update_showval(this)});
+
+  $('input.reset').on('change',this.Reset.bind(this));
 
   $("input[type='range']").on("change",this.UpdateUniforms.bind(this));
 
 
-   $("#ctl-reset").on("click",function(){
-      self.t_ms = 0;
-      self.frame_number=0;
-      self.CreatePositions();
-      self.CreateAtomPositionTexture();
-
-      if(!self.animating) $("#ctl-animate").click();
-      if(self.wavefronts && self.wavefronts.children) 
-        for(i = self.wavefronts.children.length-1; i>=0; i--) {
-          var line = self.wavefronts.children[i]; 
-          self.wavefronts.remove(line);
-        }
-  })
-
+  $("#ctl-reset").on("click",this.Reset.bind(this));
 
    // $('#ctl-natoms').on('change',this.SetAtomPositions.bind(this));
    // $('#ctl-atom-layout').on('change',this.SetAtomPositions.bind(this));
@@ -298,7 +315,20 @@ function Applet(element, options)
 
 }
 
+Applet.prototype.Reset = function()
+{
+  this.t_ms = 0;
+  this.frame_number=0;
+  this.CreatePositions();
+  this.CreateAtomPositionTexture();
 
+  if(!this.animating) $("#ctl-animate").click();
+  if(this.wavefronts && this.wavefronts.children) 
+    for(i = this.wavefronts.children.length-1; i>=0; i--) {
+      var line = this.wavefronts.children[i]; 
+      this.wavefronts.remove(line);
+    }
+}
 
 Applet.prototype.Resize = function()
 {
@@ -321,25 +351,34 @@ Applet.prototype.Resize = function()
   console.log("Resize",this.width,this.height);
 }
 
+
+Applet.prototype.UpdateSimulation = function()
+{
+  // Called when you need to reset configuration.
+
+}
 Applet.prototype.UpdateUniforms = function()
 {
   this.sim_material.uniforms.c.value                    = $("#ctl-speed").val();
   this.sim_material.uniforms.plane_wave_frequency.value = $("#ctl-frequency").val();
   this.sim_material.uniforms.plane_wave_amplitude.value = $("#ctl-amplitude").val();
   this.sim_material.uniforms.field_coupling.value       = $("#ctl-field-coupling").val();
-  
+  this.sim_material.uniforms.beam_width.value           = $("#ctl-beam-width").val();
+
   this.osc_material.uniforms.osc_density.value          = $("#ctl-density").val();
   this.osc_material.uniforms.w0.value                   = $("#ctl-w0").val();
   this.osc_material.uniforms.beta.value                 = $("#ctl-beta").val();
   this.osc_material.uniforms.x0.value                   = $("#ctl-x0").val(); 
 
-  for(l of ["speed","frequency","amplitude","field-coupling","density","w0","beta","x0"]){
-    $('#show-'+l).text($('#ctl-'+l).val());
-  }
+
   var w0 = $("#ctl-w0").val();
   var b = $("#ctl-beta").val();
+  var w = $("#ctl-frequency").val();
   $('.info-natural-frequency').text(Math.sqrt(w0*w0-b*b/4.).toFixed(2));
   $('.info-crit-damp-beta').text((2*w0).toFixed(2));
+
+  var delta_phi = Math.atan2(b*w,w0*w0-w*w)*180/Math.PI;
+  $('.info-phase-lag').html((delta_phi).toFixed(1) + "&deg;");
 
   if(!this.animating) this.AnimationRender();
 
@@ -349,12 +388,15 @@ Applet.prototype.UpdateUniforms = function()
 Applet.prototype.CreatePositions = function()
 {
   this.atoms=[];
-  var n = 1000;
-  var d = Math.sqrt(this.width*0.4*this.height/n);
-  var nx = 0.4*this.width/d;
-  var ny = this.height/d;
-  var c = Math.cos(10*3.14/180)
-  var s = Math.sin(10*3.14/180)
+  var slab_w = $('#ctl-slab-w').val();
+  var slab_h = $('#ctl-slab-h').val();
+  var n = $('#ctl-atom-n').val();
+  var angle = $('#ctl-slab-angle').val()*Math.PI/180;
+  var d = Math.sqrt(this.width*slab_w*this.height*slab_h/n);
+  var nx = slab_w*this.width/d;
+  var ny = slab_h*this.height/d;
+  var c = Math.cos(angle);
+  var s = Math.sin(angle);
   var xs = this.width/2;
   var ys = this.height/2;
   for(var ix = 0; ix<nx; ix++){
@@ -381,7 +423,7 @@ Applet.prototype.CreatePositions = function()
   // }
 
   // regular grid, constrained. to be within a wedge
-   this.atoms.push([this.width/2,this.height/2]);
+   // this.atoms.push([this.width/2,this.height/2]);
 
   // for(var ix = 0; ix<nx; ix++){
   //   for(var iy = 0; iy<ny; iy++){
@@ -421,15 +463,17 @@ Applet.prototype.CreateAtomPositionTexture = function()
   var size = this.width * this.height;
   var data = new Uint8Array( 4 * size );
   data.fill(0); 
+  var x0 = 0;//$("#ctl-x0").val();  // initial condition of each atom
+  var val = encode(x0);
+
   for(var atom of this.atoms) {
     var x = Math.floor(atom[0]);
     var y = Math.floor(atom[1]);
     // find the right row
     var loc = 4 * ((this.width * y) + x);
-    var v = encode($("#ctl-x0").val());
-    data[loc+0] = v[0];
-    data[loc+1] = v[1];
-    data[loc+2] = v[2];
+    data[loc+0] = val[0];
+    data[loc+1] = val[1];
+    data[loc+2] = val[2];
     data[loc+3] = 255;
   }
 
@@ -471,6 +515,8 @@ Applet.prototype.AnimationRender = function()
   this.sim_material.uniforms.width.value = this.width;
   this.sim_material.uniforms.height.value = this.height;
 
+  this.disp_material.uniforms.width.value = this.width;
+  this.disp_material.uniforms.height.value = this.height;
 
   // simulate.
 
@@ -508,12 +554,12 @@ Applet.prototype.AnimationRender = function()
   }
 
   // Render to the velocity map.
-  this.osc_material.uniforms.do_velocity.value = 1.0;
+  this.osc_material.uniforms.output_mode.value = 1;
   this.renderer.setRenderTarget(this.oscDotBuffers[f2]);
   this.renderer.render(this.oscBufferScene, this.camera);
 
   // Render to the position map.
-  this.osc_material.uniforms.do_velocity.value = 0;
+  this.osc_material.uniforms.output_mode.value = 0;
   this.renderer.setRenderTarget(this.oscBuffers[f2]);
   this.renderer.render(this.oscBufferScene, this.camera);
 
@@ -524,24 +570,31 @@ Applet.prototype.AnimationRender = function()
   this.sim_material.uniforms.tex_osc.value    = this.oscBuffers[f2].texture;     // most recent osc buffer, freshly computed.
   this.sim_material.uniforms.tex_psi.value    = this.psiBuffers[f1].texture;      // most recent psi buffer
   this.sim_material.uniforms.tex_psidot.value = this.psiDotBuffers[f1].texture;  // most recent psidot buffer
-  
+
   // Render to the velocity map.
-  this.sim_material.uniforms.do_velocity.value = 1.0;
+  this.sim_material.uniforms.output_mode.value = 1;
   this.renderer.setRenderTarget(this.psiDotBuffers[f2]);
   this.renderer.render(this.bufferScene, this.camera);
 
   // Render to the position map
-  this.sim_material.uniforms.do_velocity.value = 0;
+  this.sim_material.uniforms.output_mode.value = 0;
   this.renderer.setRenderTarget(this.psiBuffers[f2]);
   this.renderer.render(this.bufferScene, this.camera);
 
 
 
   // Now map the output to the screen:
-  if($('#ctl-osc').is(":checked"))
+  if($('#ctl-osc').is(":checked")) {
+   // no blur
+   this.disp_material.uniforms.scale.value = 1.0;
+   this.disp_material.uniforms.blur.value = 0;
    this.disp_material.uniforms.tex.value = this.psiBuffers[f2].texture;
-  else
-   this.disp_material.uniforms.tex.value = this.psiDotBuffers[f2].texture;
+  } else {
+    // blur
+   this.disp_material.uniforms.scale.value = 1.0;
+   this.disp_material.uniforms.blur.value = 5.0;
+   this.disp_material.uniforms.tex.value = this.oscBuffers[f2].texture;
+  }
 
   // pull values from specific pixels.
   var gl = this.renderer.getContext();
@@ -615,9 +668,9 @@ Applet.prototype.SetPlaneWaveFronts = function()
   // so, wavefront hits that at times wt=0, 2pi, 4pi, etc
   // 
 
-  var wt = frequency*t  + 10*Math.PI;
-  var wt1 = frequency*(t+1)  + 10*Math.PI;
-  if( (wt%(2*Math.PI))>=(Math.PI/2)  &&  (wt1%(2*Math.PI))<(Math.PI/2) ) {
+  var wt = frequency*t  + 20*Math.PI;
+  var wt1 = frequency*(t+1)  + 20*Math.PI;
+  if( (wt%(2*Math.PI))<=(Math.PI/2)  &&  (wt1%(2*Math.PI))>(Math.PI/2) ) {
     // Time to start a new one.
     // console.log("adding wavefront",t,wt,(wt%(2*Math.PI)),(wt1%(2*Math.PI)));
     var line = new THREE.Line2(this.wavefront_geo, this.linematerial);
